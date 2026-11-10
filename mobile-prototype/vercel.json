@@ -1,0 +1,7 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "feature/visual-upgrade-v1": false
+    }
+  }
+}

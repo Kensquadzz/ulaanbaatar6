@@ -33,6 +33,14 @@ sun and weather. Verified in the cloud: production build, 23 unit tests, and a 1
 run in headless Chromium driving the touch controls. **Not verified: any real iPhone**; frame rate
 on a device is unknown. Buildings and the character are labelled placeholders. See `mobile-prototype/README.md`.
 
+### Visual upgrade V1 (branch `feature/visual-upgrade-v1`, 2026-11-10)
+
+Facade styles and estimated heights for default-only buildings, sidewalks, curbs, crossings, instanced
+streetlights, new night sky, a jointed procedural character, camera and HUD polish, real district names
+(`data/tiles/districts.json`, built by `pipeline/ub6pipeline/build_districts.py`). Existing tile files are
+unchanged. Tested headless only (build, unit tests, end-to-end touch checks); not yet run on a real iPhone
+and not deployed. The real/procedural split is in `mobile-prototype/README.md`.
+
 ## Written, not yet compiled or run
 
 - The whole Unreal project in `unreal/Ulaanbaatar6/` (about 2,200 lines of C++ plus configs).

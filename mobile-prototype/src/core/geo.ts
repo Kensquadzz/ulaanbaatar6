@@ -65,3 +65,13 @@ export const hhmm = (unixUtc: number) => {
   const c = ubClock(unixUtc);
   return `${String(c.hour).padStart(2, '0')}:${String(c.minute).padStart(2, '0')}`;
 };
+
+/** Even-odd point-in-polygon test in East/North metres. */
+export function pointInRing(ring: [number, number][], e: number, n: number): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i], b = ring[j];
+    if ((a[1] > n) !== (b[1] > n) && e < ((b[0] - a[0]) * (n - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
+  }
+  return inside;
+}

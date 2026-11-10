@@ -17,6 +17,8 @@ fs.mkdirSync(path.join(dst, 'chunks'), { recursive: true });
 const manifest = JSON.parse(fs.readFileSync(path.join(src, 'manifest.json'), 'utf8'));
 fs.copyFileSync(path.join(src, 'manifest.json'), path.join(dst, 'manifest.json'));
 fs.copyFileSync(path.join(src, 'landmarks.json'), path.join(dst, 'landmarks.json'));
+// district outlines (Overture divisions, see pipeline/ub6pipeline/build_districts.py); optional
+if (fs.existsSync(path.join(src, 'districts.json'))) fs.copyFileSync(path.join(src, 'districts.json'), path.join(dst, 'districts.json'));
 
 const N = manifest.height_grid_n;            // 17
 const STEP = 4;                               // every 4th sample -> 64 m

@@ -18,6 +18,7 @@ export class Player {
   heading = 0;                 // radians, 0 = facing north, clockwise
   grounded = true;
   speed = 0;
+  private coyote = 0; private jumpBuf = 0;      // forgiving jump timing on touch screens
   private scratch: Collider[] = [];
   private pos: [number, number] = [0, 0];
 
@@ -44,12 +45,16 @@ export class Player {
       let diff = want - this.heading;
       while (diff > Math.PI) diff -= 2 * Math.PI;
       while (diff < -Math.PI) diff += 2 * Math.PI;
-      this.heading += diff * Math.min(1, dt * 12);
+      this.heading += diff * (1 - Math.exp(-dt * 13));
     }
-    const accel = (this.grounded ? 14 : 4) * dt;
+    // quick to start and quicker to stop on the ground; little steering in the air
+    const stopping = te === 0 && tn === 0;
+    const accel = (this.grounded ? (stopping ? 26 : 18) : 4) * dt;
     const dve = te - this.ve, dvn = tn - this.vn, dl = Math.hypot(dve, dvn);
     if (dl <= accel) { this.ve = te; this.vn = tn; } else { this.ve += (dve / dl) * accel; this.vn += (dvn / dl) * accel; }
-    if (input.jump && this.grounded) { this.vy = JUMP_V; this.grounded = false; }
+    this.coyote = this.grounded ? 0.12 : Math.max(0, this.coyote - dt);
+    this.jumpBuf = input.jump ? 0.14 : Math.max(0, this.jumpBuf - dt);
+    if (this.jumpBuf > 0 && this.coyote > 0 && this.vy <= 0) { this.vy = JUMP_V; this.grounded = false; this.coyote = 0; this.jumpBuf = 0; }
 
     // sub-step so a fast frame cannot tunnel through a thin wall
     const dist = Math.hypot(this.ve, this.vn) * dt;

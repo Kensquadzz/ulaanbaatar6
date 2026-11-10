@@ -8,6 +8,7 @@ import { ColliderSet } from './collision';
 import { paintGround } from './ground';
 import type { Materials } from './materials';
 import { buildBuildings, buildRoads, buildTerrain, type MeshData } from './meshing';
+import { buildStreet, mergeMeshes, type Lamp } from './street';
 import { HeightField, sampleGrid } from './terrain';
 import type { ChunkData, Manifest, Overview } from './types';
 
@@ -25,9 +26,37 @@ function toGeometry(m: MeshData): THREE.BufferGeometry {
   g.setAttribute('normal', new THREE.BufferAttribute(m.normal, 3));
   g.setAttribute('uv', new THREE.BufferAttribute(m.uv, 2));
   if (m.color) g.setAttribute('color', new THREE.BufferAttribute(m.color, 3));
+  if (m.style) g.setAttribute('style', new THREE.BufferAttribute(m.style, 1));
   g.setIndex(new THREE.BufferAttribute(m.position.length / 3 > 65535 ? m.index : new Uint16Array(m.index), 1));
   g.computeBoundingSphere(); g.computeBoundingBox();
   return g;
+}
+
+const LAMP_H = 8.5;
+let lampGeo: { pole: THREE.BufferGeometry; head: THREE.BufferGeometry; pool: THREE.BufferGeometry } | null = null;
+/** Shared streetlight parts (an original, generic design): tapered pole with an arm, a head, a ground pool. */
+function lampGeometry() {
+  if (lampGeo) return lampGeo;
+  const pole = new THREE.CylinderGeometry(0.07, 0.11, LAMP_H, 6).translate(0, LAMP_H / 2, 0);
+  const arm = new THREE.CylinderGeometry(0.045, 0.06, 1.7, 5).rotateZ(Math.PI / 2 - 0.12).translate(0.8, LAMP_H - 0.08, 0);
+  const merged = mergeGeometries([pole, arm]);
+  const head = new THREE.BoxGeometry(0.75, 0.12, 0.3).translate(1.5, LAMP_H - 0.2, 0);
+  const pool = new THREE.CircleGeometry(8.5, 20).rotateX(-Math.PI / 2);
+  lampGeo = { pole: merged, head, pool };
+  return lampGeo;
+}
+function mergeGeometries(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const pos: number[] = [], nor: number[] = [], uv: number[] = [], idx: number[] = [];
+  for (const g of list) {
+    const off = pos.length / 3;
+    pos.push(...(g.getAttribute('position').array as Float32Array)); nor.push(...(g.getAttribute('normal').array as Float32Array)); uv.push(...(g.getAttribute('uv').array as Float32Array));
+    for (const i of g.getIndex()!.array as Uint16Array) idx.push(i + off);
+    g.dispose();
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  out.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); out.setIndex(idx);
+  return out;
 }
 
 export class ChunkManager {
@@ -135,7 +164,9 @@ export class ChunkManager {
     if (!e.group) return;
     e.group.traverse((o) => {
       const m = o as THREE.Mesh;
+      if ((o as THREE.Points).isPoints) { (o as THREE.Points).geometry.dispose(); return; }
       if (!m.isMesh) return;
+      if (m.userData.shared) { (m as unknown as THREE.InstancedMesh).dispose(); return; }
       m.geometry.dispose();
       if (m.userData.ownMaterial) {
         const mat = m.material as THREE.MeshStandardMaterial;
@@ -171,13 +202,50 @@ export class ChunkManager {
     };
     const tex = paintGround(d, near ? this.q.groundTexNear : this.q.groundTexFar);
     add(buildTerrain(grid, n, e.cx, e.cy, (ee, nn) => this.height.heightAt(ee, nn)), this.mats.makeGround(tex), true, false, true);
-    add(buildRoads(d.roads, e.cx, e.cy, hAt, near), this.mats.road, false, false, true);
-    const b = buildBuildings(d.buildings, e.cx, e.cy, hAt);
+    const street = buildStreet(d.roads, d.buildings, e.cx, e.cy, hAt, near);
+    add(mergeMeshes(buildRoads(d.roads, e.cx, e.cy, hAt, near), street), this.mats.road, false, false, true);
+    if (street.lamps.length) tris += this.addLamps(group, street.lamps, e0, n0, near);
+    const b = buildBuildings(d.buildings, e.cx, e.cy, hAt, near);
     add(b, this.mats.building, false, near, near);
     if (near) this.colliders.set(e.key, b.colliders);
     group.updateMatrixWorld(true);
     this.root.add(group);
     e.group = group; e.lod = lod; e.tris = tris;
+  }
+
+  /** Streetlights for one chunk: instanced poles, heads and light pools near; halo points always. */
+  private addLamps(group: THREE.Group, lamps: Lamp[], e0: number, n0: number, near: boolean): number {
+    const L = lampGeometry();
+    const pts = new Float32Array(lamps.length * 3);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), s1 = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3(), nrm = new THREE.Vector3();
+    const pole = near ? new THREE.InstancedMesh(L.pole, this.mats.lampPole, lamps.length) : null;
+    const head = near ? new THREE.InstancedMesh(L.head, this.mats.lampHead, lamps.length) : null;
+    const pool = near ? new THREE.InstancedMesh(L.pool, this.mats.lampPool, lamps.length) : null;
+    lamps.forEach((l, i) => {
+      // lamp head hangs 1.5 m toward the road
+      pts[i * 3] = l.e + l.de * 1.5 - e0; pts[i * 3 + 1] = l.y + LAMP_H - 0.25; pts[i * 3 + 2] = -(l.n + l.dn * 1.5 - n0);
+      if (!pole || !head || !pool) return;
+      q.setFromAxisAngle(up, Math.atan2(l.dn, l.de));       // local +x points toward the road
+      m.compose(p.set(l.e - e0, l.y, -(l.n - n0)), q, s1);
+      pole.setMatrixAt(i, m); head.setMatrixAt(i, m);
+      // light pool lies on the terrain under the head, tilted to the local slope
+      const ce = l.e + l.de * 1.5, cn = l.n + l.dn * 1.5, hh = this.height;
+      nrm.set(hh.heightAt(ce - 2, cn) - hh.heightAt(ce + 2, cn), 4, hh.heightAt(ce, cn + 2) - hh.heightAt(ce, cn - 2)).normalize();
+      q.setFromUnitVectors(up, nrm);
+      m.compose(p.set(ce - e0, hh.heightAt(ce, cn) + 0.16, -(cn - n0)), q, s1);
+      pool.setMatrixAt(i, m);
+    });
+    const halo = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(pts, 3)), this.mats.lampHalo);
+    halo.userData.ownGeometry = true;
+    halo.matrixAutoUpdate = false;
+    group.add(halo);
+    for (const im of [pole, head, pool]) {
+      if (!im) continue;
+      im.instanceMatrix.needsUpdate = true; im.matrixAutoUpdate = false; im.computeBoundingSphere();
+      im.userData.shared = true;
+      group.add(im);
+    }
+    return near ? lamps.length * (L.pole.index!.count + L.head.index!.count + L.pool.index!.count) / 3 : 0;
   }
 
   private recount() {

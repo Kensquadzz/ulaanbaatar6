@@ -111,7 +111,7 @@ describe('collision', () => {
     const m = buildBuildings(palace, -1, 0, hAt);
     let top = -Infinity, bottom = Infinity;
     for (let i = 1; i < m.position.length; i += 3) { top = Math.max(top, m.position[i]); bottom = Math.min(bottom, m.position[i]); }
-    expect(top).toBeCloseTo(hi + palace[0].height, 3);
+    expect(top).toBeGreaterThanOrEqual(hi + palace[0].height);   // drawn at least as tall as the data says, above the bulge
     expect(bottom).toBeLessThanOrEqual(lo);
   });
 

@@ -17,7 +17,7 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 3, hasTouch: true, isMobile: true });
 const page = await ctx.newPage();
 page.on('pageerror', (e) => report.errors.push(e.message));
-page.on('console', (m) => { if (m.type() === 'error' && !/429|Failed to load resource/.test(m.text())) report.errors.push(m.text()); });
+page.on('console', (m) => { if (m.type() === 'error' && !/429|Failed to load resource|api\.open-meteo\.com/.test(m.text())) report.errors.push(m.text()); });
 const cdp = await ctx.newCDPSession(page);
 const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y, id]) => ({ x, y, id })) });
 const stats = () => page.evaluate(() => window.__ub6.stats());

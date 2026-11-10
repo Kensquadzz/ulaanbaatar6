@@ -23,12 +23,26 @@ npm run perf       # end-to-end touch test + frame statistics (needs Playwright 
 
 ## What is real and what is a placeholder
 
-| Real data | Temporary / procedural |
+| Real data | Procedural / estimated (styling only, never written to the data) |
 |---|---|
-| Terrain heights, road network, building footprints and positions, water, land use, landmark and street names | Building facades (one procedural window pattern, tint by class) and flat roofs |
-| Clock (Asia/Ulaanbaatar, UTC+8), sun position, sunrise and sunset (NOAA algorithm, same as `core/`) | The character (primitives assembled in code, procedural animation) |
-| Weather when the badge says LIVE (Open-Meteo, or the project server) | Road centre dashes, ground colours, sky colour ramps, cloud and star shapes |
-| | Building heights where the source has none (11,747 of 13,604 use a class default, flagged in the data) |
+| Terrain heights (16 m grid), road network and classes, building footprints and positions, water, land use, landmark and street names | Facades: seven procedural styles (prefab housing, glass, civic stone, brick, retail, plain, shopfront) chosen from building class, size and a per-building hash |
+| District (дүүрэг) outlines: Overture divisions, `data/tiles/districts.json` | Heights of the 11,747 buildings whose source height is only a 6 m class default: estimated from footprint area and class (`buildingLook`), not surveyed |
+| Building heights where the source has one (31) or a floor count (1,826) | Government Palace height (about 22 m): the source says one floor, which is wrong; the value used is an approximation and its facade is generic civic stone, not the real building |
+| Clock (Asia/Ulaanbaatar, UTC+8), sun position, sunrise and sunset (NOAA algorithm, same as `core/`) | Roof shapes (gable on small houses, cone on gers), rooftop boxes, ground-floor shopfronts, sign bands (blank, no brands) |
+| Weather when the badge says LIVE (Open-Meteo, or the project server) | Sidewalks, curbs, lane markings and every streetlight position (the source has none). Zebra crossings are placed where a mapped footway crosses a road, but their size is generic |
+| | Sky colour ramps, clouds, stars, city glow, night fill light. No moon is modelled |
+| | The character: an original jointed figure built in code with procedural walk, run, jump and idle. An improved stand-in, not a finished realistic model |
+
+### Visual upgrade V1 (branch `feature/visual-upgrade-v1`)
+
+- Buildings: one draw call per chunk for all styles through a texture array (WebGL2), per-wall bay fitting so windows are never cut, warm lit windows at night, baked contact shadow on the ground around footprints.
+- Streets: `src/world/street.ts` builds sidewalks with curbs, crossings and lamps from the real centre lines; a wider road atlas adds lane lines, edge lines and worn asphalt.
+- Streetlights are instanced (pole, head, additive light pool) plus one halo point cloud per chunk. There are no real light sources, so the cost does not grow with lamp count; distant chunks keep only the halos.
+- Night sky: sparse faint stars, warm city glow at the horizon, fog matched to it.
+- Camera: eased rotation, three-ray wall and ground avoidance, slight shoulder offset, wider view when sprinting. Movement: faster stop and start, forgiving jump timing.
+- HUD: district name, cleaner mini-map with view cone, destination and GPS card, restyled joystick and buttons.
+- Terrain detail is unchanged: the only real elevation is the 16 m grid, and nothing finer was invented.
+- Texture compression (KTX2/Basis) is not used because every texture is generated in code at small sizes; it becomes relevant once photographic or authored textures are added.
 
 Known data artefact: the terrain source includes some building bulk, so the ground bulges
 under large buildings (up to about 10 m at Government Palace, north of Sukhbaatar Square).
@@ -37,6 +51,8 @@ building on the highest terrain under its footprint and runs the walls down to t
 (`groundRange` in `src/world/meshing.ts`). The data files are unchanged; the stated height is
 simply always visible above ground. The bulge itself is still walkable terrain outside footprints.
 Night lighting is a stylised cool fill plus a dim shadowless key light, not a modelled moon.
+
+This branch has a `vercel.json` that switches off Vercel deployments for `feature/visual-upgrade-v1`, so pushing it does not publish anything. Remove that entry when a deployment is approved.
 
 ## Live weather and keys
 

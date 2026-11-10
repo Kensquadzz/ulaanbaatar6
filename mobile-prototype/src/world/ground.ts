@@ -39,6 +39,22 @@ export function paintGround(c: ChunkData, size: number): THREE.CanvasTexture {
     }
   };
   c.water.forEach(water);
+  // paved squares: slab joints every 4 m, clipped to the real plaza / pedestrian polygon
+  for (const a of areas) {
+    if (a.class !== 'plaza' && a.class !== 'pedestrian') continue;
+    g.save(); path(a.ring!); g.closePath(); g.clip();
+    g.strokeStyle = 'rgba(0,0,0,0.10)'; g.lineWidth = 1;
+    const step = Math.max(4, 4 * k);
+    for (let x = 0; x <= size; x += step) { g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, size); g.stroke(); }
+    for (let y = 0; y <= size; y += step) { g.beginPath(); g.moveTo(0, y + 0.5); g.lineTo(size, y + 0.5); g.stroke(); }
+    g.restore();
+  }
+  // baked contact shadow: the ground darkens toward every building footprint
+  g.lineJoin = 'round';
+  for (const w of [7, 4, 2]) {
+    g.strokeStyle = 'rgba(12,14,22,0.10)'; g.lineWidth = Math.max(1.5, w * k);
+    for (const b of c.buildings) for (const ring of b.rings) { if (ring.length < 3) continue; path(ring); g.closePath(); g.stroke(); }
+  }
   // fine grain so large flat areas are not a single flat colour
   let s = ((c.chunk[0] * 73856093) ^ (c.chunk[1] * 19349663)) >>> 0;
   const r = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };

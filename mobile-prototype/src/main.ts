@@ -18,6 +18,8 @@ import { Precipitation } from './world/precip';
 import { SkySystem } from './world/sky';
 import type { ChunkData, Landmark, Manifest, Overview } from './world/types';
 
+import { pointInRing } from './core/geo';
+interface District { name: string; name_en: string; rings: [number, number][][] }
 const DATA = import.meta.env.BASE_URL + 'data/';
 const MANUAL: Record<Exclude<WeatherChoice, 'live'>, SceneWeather> = {
   clear: { cloud: 0.05, fog: 0, rain: 0, snow: 0, snowCover: 0, windMs: 1 },
@@ -104,6 +106,7 @@ async function boot() {
     camera.aspect = w / h;
     // keep a comfortable horizontal view on very wide phones
     camera.fov = w / h > 2 ? 52 : 62;
+    follow?.setBaseFov(camera.fov);
     camera.updateProjectionMatrix();
   }
   function setQuality(name: QualityName) {
@@ -151,6 +154,13 @@ async function boot() {
     const local = real + UB_UTC_OFFSET_S;
     return local - (((local % 86400) + 86400) % 86400) - UB_UTC_OFFSET_S + freeHour * 3600;
   };
+  // real district outlines (Overture divisions); the name is simply absent if the file is missing
+  let districts: District[] = [];
+  fetch(DATA + 'districts.json').then((r) => (r.ok ? r.json() : null)).then((d) => { if (d?.districts) districts = d.districts; }).catch(() => { /* optional */ });
+  function districtAt(e: number, n: number): string | null {
+    for (const d of districts) for (const ring of d.rings) if (pointInRing(ring, e, n)) return hud.prefs.lang === 'mn' ? d.name : d.name_en;
+    return null;
+  }
   const nearData: ChunkData[] = [];
   function nearestNames(): [string | null, string | null] {
     let best = 45 * 45, name: string | null = null, sub: string | null = null, bestB = 110 * 110;
@@ -204,7 +214,7 @@ async function boot() {
     }
     const px = player.e, py = pendingPlace ? world.heightAt(player.e, player.n) : player.y, pz = -player.n;
     character.update(dt, px, py, pz, player.heading, player.speed, player.grounded, player.vy);
-    follow.update(dt, px, py, pz, world.heightAt, chunks.colliders);
+    follow.update(dt, px, py, pz, world.heightAt, chunks.colliders, player.speed);
     character.root.visible = follow.current > 1.3;
 
     // live systems
@@ -243,11 +253,11 @@ async function boot() {
       hud.setWeather(weather.state, freshness(weather.state, real), weatherChoice, real);
       nearData.length = 0; chunks.forNearData(1, (d) => nearData.push(d));
       const [street, sub] = nearestNames();
-      hud.setStreet(street, sub);
+      hud.setStreet(street, sub, districtAt(player.e, player.n));
       if (dest) {
         const d = Math.hypot(dest.east - player.e, dest.north - player.n);
         const g = enuToGeo(player.e, player.n);
-        hud.setDest(`▲ ${t('lm_zaisan_hill')} ${d >= 1000 ? (d / 1000).toFixed(1) + ' km' : Math.round(d) + ' m'}\n${g.lat.toFixed(5)}, ${g.lon.toFixed(5)}`);
+        hud.setDest(t('lm_zaisan_hill'), d >= 1000 ? (d / 1000).toFixed(1) + ' km' : Math.round(d) + ' m', `${g.lat.toFixed(5)}° N  ${g.lon.toFixed(5)}° E`);
       }
     }
     if (mapTimer <= 0 && started) {
@@ -265,7 +275,9 @@ async function boot() {
     setTime: (hour: number | null) => { timeLive = hour === null; if (hour !== null) freeHour = hour; hudTimer = 0; },
     setWeather: (w: WeatherChoice) => { weatherChoice = w; },
     setQuality: (q: QualityChoice) => applyQuality(q),
-    look: (yaw: number, pitch: number) => { follow.yaw = yaw; follow.pitch = pitch; },
+    look: (yaw: number, pitch: number) => { follow.yaw = yaw; follow.pitch = pitch; follow.snap(); },
+    zoom: (d: number) => { follow.distance = d; follow.snap(); },
+    face: (h: number) => { player.heading = h; },
     weather: () => weather.state,
   };
   requestAnimationFrame(frame);

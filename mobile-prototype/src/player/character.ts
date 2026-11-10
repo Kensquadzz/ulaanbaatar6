@@ -1,74 +1,202 @@
-// TEMPORARY PLACEHOLDER character: an original figure assembled from primitives in code (a simple
-// deel-style coat, sash, boots and hat) with a procedural walk/run/jump cycle. It stands in until
-// a proper rigged, licensed character model exists. No third-party assets are used.
+// Player character: an ORIGINAL figure built in code (no third-party model), with human proportions
+// (1.75 m, about 7.5 heads), jointed limbs (shoulder, elbow, hip, knee, ankle) and procedural
+// walk / run / jump / idle poses that blend smoothly.
+//
+// Honest status: this is an improved stylised stand-in wearing everyday city winter clothes
+// (quilted jacket, scarf, beanie, jeans, trainers). It is NOT a finished realistic character:
+// there is no skinned mesh, no facial detail, no cloth simulation and no motion-captured animation.
+// A properly licensed rigged model (glTF) should replace it; the joint layout below matches a
+// standard humanoid so that swap stays local to this file.
 import * as THREE from 'three';
+
+type Pose = Record<string, number>;
+const JOINTS = ['hipL', 'hipR', 'kneeL', 'kneeR', 'ankleL', 'ankleR', 'shL', 'shR', 'shLz', 'shRz', 'elL', 'elR',
+  'lean', 'twist', 'pelvisTwist', 'bob', 'head', 'crouch'] as const;
+const zero = (): Pose => Object.fromEntries(JOINTS.map((j) => [j, 0]));
+const ease = (x: number) => x * x * (3 - 2 * x);
+
+/** Body of revolution with horizontal quilting, hanging down from the origin (y = 0 to -len). */
+function quilted(rTop: number, rBot: number, len: number, rings: number, puff: number, seg = 12): THREE.BufferGeometry {
+  const pts: THREE.Vector2[] = [];
+  const steps = rings * 4;
+  pts.push(new THREE.Vector2(0.001, 0));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const r = rTop + (rBot - rTop) * t + Math.abs(Math.sin(t * rings * Math.PI)) * puff;
+    pts.push(new THREE.Vector2(r, -t * len));
+  }
+  pts.push(new THREE.Vector2(0.001, -len));
+  pts.reverse();                                   // lathe wants increasing y for outward normals
+  return new THREE.LatheGeometry(pts, seg);
+}
+const tube = (rTop: number, rBot: number, len: number, seg = 10) => new THREE.CylinderGeometry(rTop, rBot, len, seg).translate(0, -len / 2, 0);
 
 export class Character {
   readonly root = new THREE.Group();
-  private body = new THREE.Group();
-  private legL: THREE.Group; private legR: THREE.Group; private armL: THREE.Group; private armR: THREE.Group;
-  private phase = 0;
+  private body = new THREE.Group();        // faces +z; rotated so heading 0 looks north
+  private pelvis = new THREE.Group();
+  private spine = new THREE.Group();
+  private headG = new THREE.Group();
+  private j: Record<string, THREE.Group> = {};
   private blob: THREE.Mesh;
+  private phase = 0;
+  private wMove = 0; private wAir = 0; private land = 0; private wasGrounded = true;
+  private gait = 0;                        // smoothed speed driving the walk-to-run blend
+  private idleT = 0;
+  private pose = zero();
 
   constructor(pbr: boolean) {
-    const mat = (c: number, r = 0.8) => (pbr ? new THREE.MeshStandardMaterial({ color: c, roughness: r }) : new THREE.MeshLambertMaterial({ color: c }));
-    const coat = mat(0x1f4f8f), sash = mat(0xd8862a), skin = mat(0xd9a57a, 0.7), boot = mat(0x2a1d16), hat = mat(0x3b2a20), trouser = mat(0x2b2f3a);
-    const add = (parent: THREE.Object3D, geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number) => {
-      const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; parent.add(o); return o;
+    const mat = (c: number, r = 0.8, m = 0) => (pbr ? new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m }) : new THREE.MeshLambertMaterial({ color: c }));
+    const jacket = mat(0x1d3a4a, 0.5), jacketTrim = mat(0x12242e, 0.6), scarf = mat(0xb5562b, 0.95), skin = mat(0xd3a07a, 0.65);
+    const hair = mat(0x15110f, 0.7), beanie = mat(0x2a2c31, 1), jeans = mat(0x2b3b55, 0.92), shoe = mat(0xe9e7e2, 0.6), sole = mat(0x1b1b1d, 0.9), dark = mat(0x121316, 0.5);
+    const add = (parent: THREE.Object3D, geo: THREE.BufferGeometry, m: THREE.Material, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1) => {
+      const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.scale.set(sx, sy, sz); o.castShadow = true; parent.add(o); return o;
     };
-    // torso + coat skirt (hips at y = 0.92)
-    add(this.body, new THREE.CylinderGeometry(0.19, 0.23, 0.56, 12), coat, 0, 1.22, 0);
-    add(this.body, new THREE.CylinderGeometry(0.235, 0.3, 0.42, 12), coat, 0, 0.78, 0);
-    add(this.body, new THREE.CylinderGeometry(0.24, 0.24, 0.07, 12), sash, 0, 0.98, 0);
-    add(this.body, new THREE.SphereGeometry(0.2, 12, 8), coat, 0, 1.47, 0).scale.set(1.15, 0.5, 0.8);   // shoulders
-    add(this.body, new THREE.CylinderGeometry(0.06, 0.07, 0.1, 8), skin, 0, 1.56, 0);
-    add(this.body, new THREE.SphereGeometry(0.115, 14, 10), skin, 0, 1.67, 0);
-    add(this.body, new THREE.SphereGeometry(0.125, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), hat, 0, 1.7, 0);
-    add(this.body, new THREE.ConeGeometry(0.06, 0.1, 8), sash, 0, 1.86, 0);
-    const limb = (x: number, y: number, len: number, rad: number, m: THREE.Material, foot: boolean) => {
-      const g = new THREE.Group(); g.position.set(x, y, 0);
-      add(g, new THREE.CapsuleGeometry(rad, len - rad * 2, 3, 8), m, 0, -len / 2, 0);
-      if (foot) add(g, new THREE.BoxGeometry(0.11, 0.1, 0.26), boot, 0, -len + 0.03, 0.05);
-      else add(g, new THREE.SphereGeometry(0.05, 8, 6), skin, 0, -len, 0);
-      this.body.add(g); return g;
+    const joint = (name: string, parent: THREE.Object3D, x: number, y: number, z = 0) => {
+      const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); this.j[name] = g; return g;
     };
-    this.legL = limb(-0.1, 0.9, 0.88, 0.075, trouser, true); this.legR = limb(0.1, 0.9, 0.88, 0.075, trouser, true);
-    this.armL = limb(-0.28, 1.44, 0.6, 0.055, coat, false); this.armR = limb(0.28, 1.44, 0.6, 0.055, coat, false);
+
+    // ---- pelvis and legs (hip joints at 0.93 m) ----
+    this.pelvis.position.y = 0.93;
+    this.body.add(this.pelvis);
+    add(this.pelvis, new THREE.SphereGeometry(0.17, 12, 8), jeans, 0, 0, 0, 1.02, 0.62, 0.72);
+    for (const [s, n] of [[-1, 'L'], [1, 'R']] as const) {
+      const hip = joint('hip' + n, this.pelvis, 0.095 * s, -0.02);
+      add(hip, tube(0.092, 0.066, 0.44), jeans);
+      add(hip, new THREE.SphereGeometry(0.088, 10, 8), jeans);
+      const knee = joint('knee' + n, hip, 0, -0.44);
+      add(knee, new THREE.SphereGeometry(0.063, 10, 8), jeans);
+      add(knee, tube(0.066, 0.05, 0.4), jeans);
+      const ankle = joint('ankle' + n, knee, 0, -0.42);
+      // trainer: upper, toe cap and a dark sole; the foot is 26 cm long
+      add(ankle, new THREE.SphereGeometry(0.055, 10, 8), shoe, 0, 0.0, -0.005, 1, 0.9, 1.1);
+      add(ankle, new THREE.CapsuleGeometry(0.046, 0.13, 3, 8).rotateX(Math.PI / 2), shoe, 0, -0.035, 0.06, 1.05, 0.85, 1);
+      add(ankle, new THREE.BoxGeometry(0.1, 0.025, 0.26), sole, 0, -0.068, 0.05);
+    }
+
+    // ---- torso: quilted jacket from the hips to the shoulders ----
+    this.spine.position.y = 0.02;
+    this.pelvis.add(this.spine);
+    add(this.spine, quilted(0.2, 0.185, 0.62, 5, 0.014, 14), jacket, 0, 0.56, 0, 1, 1, 0.68);
+    add(this.spine, new THREE.CylinderGeometry(0.19, 0.19, 0.05, 14), jacketTrim, 0, -0.045, 0, 1, 1, 0.68);     // hem band
+    add(this.spine, new THREE.SphereGeometry(0.2, 14, 8), jacket, 0, 0.5, 0, 1.08, 0.42, 0.66);                  // shoulder yoke
+    add(this.spine, new THREE.BoxGeometry(0.012, 0.56, 0.01), dark, 0, 0.26, 0.134);                             // zip
+    add(this.spine, new THREE.TorusGeometry(0.085, 0.036, 8, 14).rotateX(Math.PI / 2), scarf, 0, 0.6, 0.005, 1, 1.25, 1);
+    add(this.spine, new THREE.BoxGeometry(0.07, 0.2, 0.03), scarf, 0.035, 0.49, 0.125);                          // scarf end
+    add(this.spine, new THREE.SphereGeometry(0.12, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.5).rotateX(-Math.PI * 0.62), jacketTrim, 0, 0.56, -0.07, 1, 0.7, 0.8);   // folded hood
+
+    // ---- head ----
+    this.headG.position.y = 0.63;
+    this.spine.add(this.headG);
+    add(this.headG, new THREE.CylinderGeometry(0.048, 0.055, 0.09, 10), skin, 0, 0.03, 0);
+    add(this.headG, new THREE.SphereGeometry(0.1, 16, 12), skin, 0, 0.165, 0.004, 0.94, 1.14, 1.02);
+    add(this.headG, new THREE.SphereGeometry(0.02, 8, 6), skin, 0, 0.15, 0.1, 0.9, 1.1, 1);                      // nose
+    for (const s of [-1, 1]) {
+      add(this.headG, new THREE.SphereGeometry(0.025, 8, 6), skin, 0.095 * s, 0.16, -0.002, 0.45, 1, 0.75);      // ears
+      add(this.headG, new THREE.SphereGeometry(0.011, 6, 5), dark, 0.036 * s, 0.185, 0.089);                     // eyes
+      add(this.headG, new THREE.BoxGeometry(0.036, 0.007, 0.01), hair, 0.036 * s, 0.207, 0.09);                  // brows
+    }
+    add(this.headG, new THREE.SphereGeometry(0.104, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.62), hair, 0, 0.17, -0.012, 0.97, 1.12, 1.03);
+    add(this.headG, new THREE.SphereGeometry(0.108, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.46), beanie, 0, 0.19, -0.004, 0.99, 1.16, 1.05);
+    add(this.headG, new THREE.TorusGeometry(0.103, 0.018, 6, 16).rotateX(Math.PI / 2), beanie, 0, 0.212, -0.002, 1, 1.5, 1.04);   // beanie cuff
+
+    // ---- arms (shoulder joints at 1.44 m) ----
+    for (const [s, n] of [[-1, 'L'], [1, 'R']] as const) {
+      const sh = joint('sh' + n, this.spine, 0.218 * s, 0.5);
+      add(sh, new THREE.SphereGeometry(0.076, 10, 8), jacket);
+      add(sh, quilted(0.066, 0.056, 0.29, 3, 0.012, 10), jacket);
+      const el = joint('el' + n, sh, 0, -0.29);
+      add(el, new THREE.SphereGeometry(0.058, 10, 8), jacket);
+      add(el, quilted(0.055, 0.047, 0.25, 3, 0.01, 10), jacket);
+      add(el, new THREE.CylinderGeometry(0.046, 0.044, 0.035, 10), jacketTrim, 0, -0.255, 0);                    // cuff
+      // hand: palm, fingers and thumb as three simple volumes
+      add(el, new THREE.SphereGeometry(0.04, 8, 6), skin, 0, -0.31, 0.005, 0.62, 1.25, 1.1);
+      add(el, new THREE.SphereGeometry(0.034, 8, 6), skin, 0, -0.365, 0.012, 0.56, 1.2, 0.95);
+      add(el, new THREE.SphereGeometry(0.014, 6, 5), skin, -0.012 * s, -0.31, 0.04, 1, 1.9, 1);
+    }
+
     this.root.add(this.body);
     // soft contact shadow used when real shadows are off (low preset, night)
     this.blob = new THREE.Mesh(new THREE.CircleGeometry(0.42, 20),
       new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }));
     this.blob.rotation.x = -Math.PI / 2; this.blob.position.y = 0.04;
     this.root.add(this.blob);
-    // the model is authored facing +z; rotate so heading 0 (north) faces -z
-    this.body.rotation.y = Math.PI;
+    this.body.rotation.y = Math.PI;        // authored facing +z; heading 0 (north) is -z
   }
 
   setBlob(on: boolean) { this.blob.visible = on; }
+
+  /** Joint angles of the locomotion cycle. `run` 0 = walk, 1 = sprint; angles in radians, forward positive. */
+  private locomotion(run: number, out: Pose) {
+    const p = this.phase;
+    const hipA = 0.42 + 0.48 * run, kneeSwing = 0.95 + 0.95 * run, kneeStance = 0.1 + 0.22 * run;
+    const armA = 0.38 + 0.62 * run, elbow = 0.3 + 1.15 * run;
+    for (const [n, ph] of [['L', p], ['R', p + Math.PI]] as const) {
+      const s = Math.sin(ph), c = Math.cos(ph);
+      out['hip' + n] = hipA * s + 0.1 * run;
+      // the knee folds while the leg swings forward and stays nearly straight in stance
+      out['knee' + n] = kneeStance * (0.5 - 0.5 * Math.cos(2 * ph)) + kneeSwing * Math.pow(Math.max(0, c), 1.6);
+      out['ankle' + n] = -0.25 * s + 0.18 * Math.max(0, c);
+    }
+    // arms counter-swing: left arm goes with the right leg
+    out.shL = -armA * Math.sin(p); out.shR = armA * Math.sin(p);
+    out.elL = elbow + 0.25 * Math.max(0, -Math.sin(p)) * (0.5 + run); out.elR = elbow + 0.25 * Math.max(0, Math.sin(p)) * (0.5 + run);
+    out.shLz = -0.07 - 0.05 * run; out.shRz = 0.07 + 0.05 * run;
+    out.lean = 0.04 + 0.2 * run;
+    out.twist = 0.1 * (0.6 + run) * Math.sin(p); out.pelvisTwist = -0.07 * (0.5 + run) * Math.sin(p);
+    out.bob = -(0.012 + 0.03 * run) * (0.5 + 0.5 * Math.cos(2 * p)) - 0.02 * run;
+    out.head = -0.03 - 0.1 * run; out.crouch = 0;
+  }
 
   /** heading: radians clockwise from north. */
   update(dt: number, x: number, y: number, z: number, heading: number, speed: number, grounded: boolean, vy: number) {
     this.root.position.set(x, y, z);
     this.root.rotation.y = -heading;
-    (this.blob.material as THREE.MeshBasicMaterial).opacity = grounded ? 0.32 : 0.12;
-    const run = Math.min(1, speed / 7);
-    if (grounded && speed > 0.15) {
-      this.phase += dt * (3.2 + speed * 1.55);
-      const swing = 0.35 + run * 0.65, s = Math.sin(this.phase);
-      this.legL.rotation.x = s * swing; this.legR.rotation.x = -s * swing;
-      this.armL.rotation.x = -s * swing * 0.9; this.armR.rotation.x = s * swing * 0.9;
-      this.body.position.y = Math.abs(Math.cos(this.phase)) * 0.035 * (0.5 + run);
-      this.body.rotation.x = -run * 0.16;
-    } else if (!grounded) {
-      const up = vy > 0 ? 1 : 0.4;
-      this.legL.rotation.x = 0.5 * up; this.legR.rotation.x = -0.25 * up;
-      this.armL.rotation.x = -1.1 * up; this.armR.rotation.x = -0.9 * up;
-      this.body.rotation.x = -0.05;
-    } else {
-      const k = Math.min(1, dt * 10);
-      for (const l of [this.legL, this.legR, this.armL, this.armR]) l.rotation.x *= 1 - k;
-      this.body.position.y *= 1 - k; this.body.rotation.x *= 1 - k;
-      this.armL.rotation.z = -0.06; this.armR.rotation.z = 0.06;
+    const k = (r: number) => 1 - Math.exp(-dt * r);
+    (this.blob.material as THREE.MeshBasicMaterial).opacity += ((grounded ? 0.32 : 0.12) - (this.blob.material as THREE.MeshBasicMaterial).opacity) * k(10);
+
+    // blend weights ease toward their targets, so no pose ever snaps
+    const moving = grounded && speed > 0.2;
+    this.wMove += ((moving ? 1 : 0) - this.wMove) * k(9);
+    this.wAir += ((grounded ? 0 : 1) - this.wAir) * k(grounded ? 14 : 9);
+    this.gait += (speed - this.gait) * k(6);
+    if (grounded && !this.wasGrounded) this.land = 1;            // landing squash
+    this.wasGrounded = grounded;
+    this.land = Math.max(0, this.land - dt * 3.2);
+    this.idleT += dt;
+
+    // stride lengthens with speed: one full cycle covers about 1.7 m walking and 3.6 m sprinting
+    const g = Math.max(this.gait, speed * 0.6);
+    if (moving || this.wMove > 0.05) this.phase += dt * (2 * Math.PI * Math.max(0.6, g)) / (1.1 + 0.36 * g);
+    const run = ease(Math.max(0, Math.min(1, (this.gait - 1.9) / 4.6)));
+
+    const idle = zero(), move = zero(), air = zero();
+    const breath = Math.sin(this.idleT * 1.6);
+    idle.shLz = -0.08; idle.shRz = 0.08; idle.elL = 0.14 + 0.02 * breath; idle.elR = 0.14 - 0.02 * breath;
+    idle.shL = 0.03 * breath; idle.shR = 0.03 * breath; idle.bob = 0.004 * breath; idle.twist = 0.015 * Math.sin(this.idleT * 0.7);
+    this.locomotion(run, move);
+    const up = vy > 0 ? 1 : 0;                                  // rising: tuck; falling: reach for the ground
+    air.hipL = 0.75 * up + 0.25; air.kneeL = 1.15 * up + 0.35; air.hipR = 0.15 * up - 0.1; air.kneeR = 0.55 * up + 0.3;
+    air.ankleL = air.ankleR = 0.3 - 0.2 * up;
+    air.shL = 0.9 * up + 0.3; air.shR = 0.5 * up + 0.5; air.shLz = -0.35; air.shRz = 0.35; air.elL = 0.9; air.elR = 0.7;
+    air.lean = 0.12 * up - 0.03; air.head = 0.05;
+
+    const P = this.pose, sq = Math.sin(this.land * Math.PI) * this.land;
+    for (const n of JOINTS) {
+      const ground = idle[n] + (move[n] - idle[n]) * this.wMove;
+      const target = ground + (air[n] - ground) * this.wAir;
+      P[n] += (target - P[n]) * k(22);
     }
+    const crouch = sq * 0.55;
+    const J = this.j;
+    J.hipL.rotation.x = -(P.hipL + crouch * 0.9); J.hipR.rotation.x = -(P.hipR + crouch * 0.9);
+    J.kneeL.rotation.x = P.kneeL + crouch * 1.7; J.kneeR.rotation.x = P.kneeR + crouch * 1.7;
+    J.ankleL.rotation.x = -(P.ankleL + crouch * 0.8) ; J.ankleR.rotation.x = -(P.ankleR + crouch * 0.8);
+    J.shL.rotation.x = -P.shL; J.shR.rotation.x = -P.shR; J.shL.rotation.z = P.shLz; J.shR.rotation.z = P.shRz;
+    J.elL.rotation.x = -P.elL; J.elR.rotation.x = -P.elR;
+    this.pelvis.position.y = 0.93 + P.bob - crouch * 0.2;
+    this.pelvis.rotation.y = P.pelvisTwist;
+    this.spine.rotation.x = P.lean + crouch * 0.35; this.spine.rotation.y = P.twist - P.pelvisTwist;
+    this.headG.rotation.x = P.head - crouch * 0.2; this.headG.rotation.y = -P.twist * 0.8;
   }
 }
