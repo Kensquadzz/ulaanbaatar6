@@ -47,6 +47,7 @@ export class Hud {
     $('btnPlay').addEventListener('click', () => ev.onPlay());
     const open = (o: boolean) => { $('settings').classList.toggle('hidden', !o); ev.onPause(o); };
     $('btnSettings').addEventListener('click', () => open(true));
+    $('info').addEventListener('click', () => $('info').classList.toggle('open'));
     $('btnClose').addEventListener('click', () => open(false));
     $('settings').addEventListener('click', (e) => { if (e.target === $('settings')) open(false); });
     this.onSeg('segLang', (v) => { this.prefs.lang = v as Lang; setLang(v as Lang); this.save(); this.fillTravel(landmarks, open); });

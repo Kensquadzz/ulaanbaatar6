@@ -16,17 +16,18 @@ button { font: inherit; color: inherit; border: 0; background: none; touch-actio
 #hud > * { position: absolute; }
 .card { background: var(--glass); border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px;
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
-#info { left: max(14px, var(--sal)); top: max(10px, var(--sat)); min-width: 150px; font-size: 11px; line-height: 1.35; }
-#info .row { display: flex; align-items: center; gap: 6px; }
-#clock { font-size: 22px; font-weight: 700; letter-spacing: 0.5px; font-variant-numeric: tabular-nums; }
-#info .wx { font-size: 13px; font-weight: 600; margin-top: 2px; }
-.badge { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,0.16); }
+#info { pointer-events: auto; font-size: 10px; line-height: 1.4; padding: 5px 9px; border-radius: 12px; max-width: 220px; }
+#info .row { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+#clock { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+#infoMore { display: none; margin-top: 3px; opacity: 0.8; }
+#info.open #infoMore { display: block; }
+.badge { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; padding: 1px 5px; border-radius: 6px; background: rgba(255,255,255,0.16); }
 .badge.live { background: #1f9d55; } .badge.stale { background: #b7791f; } .badge.off { background: #6b7280; } .badge.free { background: #5b5fc7; }
 #street { left: 50%; top: max(10px, var(--sat)); transform: translateX(-50%); text-align: center; font-size: 13px; font-weight: 600;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.9); max-width: 42vw; }
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9); max-width: 34vw; }
 #street small { display: block; font-weight: 500; opacity: 0.8; font-size: 11px; }
 #topRight { right: max(14px, var(--sar)); top: max(10px, var(--sat)); display: flex; gap: 8px; align-items: flex-start; }
-#mapwrap { text-align: center; }
+#mapwrap { left: max(14px, var(--sal)); top: max(10px, var(--sat)); text-align: left; }
 #minimap { width: 118px; height: 118px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.55); background: #1b2230; display: block; box-shadow: 0 2px 10px rgba(0,0,0,0.4); }
 #dest { white-space: pre-line; font-size: 11px; margin-top: 3px; text-shadow: 0 1px 3px rgba(0,0,0,0.9); font-weight: 600; }
 .round { pointer-events: auto; width: 42px; height: 42px; border-radius: 50%; background: var(--glass); border: 1px solid var(--line);

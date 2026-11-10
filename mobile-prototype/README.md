@@ -31,7 +31,12 @@ npm run perf       # end-to-end touch test + frame statistics (needs Playwright 
 | | Building heights where the source has none (11,747 of 13,604 use a class default, flagged in the data) |
 
 Known data artefact: the terrain source includes some building bulk, so the ground bulges
-slightly under a few large buildings (visible north of Sukhbaatar Square).
+under large buildings (up to about 10 m at Government Palace, north of Sukhbaatar Square).
+A building placed at its lowest corner was buried in that bulge, so the prototype stands each
+building on the highest terrain under its footprint and runs the walls down to the lowest
+(`groundRange` in `src/world/meshing.ts`). The data files are unchanged; the stated height is
+simply always visible above ground. The bulge itself is still walkable terrain outside footprints.
+Night lighting is a stylised cool fill plus a dim shadowless key light, not a modelled moon.
 
 ## Live weather and keys
 

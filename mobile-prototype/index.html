@@ -19,19 +19,20 @@
   <div id="touch"></div>
 
   <div id="hud" class="hidden">
-    <div id="info" class="card">
-      <div class="row"><span id="clock">--:--</span><span id="timeBadge" class="badge live"></span></div>
-      <div id="date" class="dim"></div>
-      <div class="row wx"><span id="wxIcon"></span><span id="wxTemp"></span><span id="wxText"></span></div>
-      <div class="row"><span id="wxBadge" class="badge"></span><span id="wxAge" class="dim"></span></div>
-      <div id="sunLine" class="dim"></div>
-    </div>
+    <div id="mapwrap"><canvas id="minimap"></canvas><div id="dest"></div></div>
     <div id="street"></div>
     <div id="topRight">
+      <div id="info" class="card" role="button">
+        <div class="row"><span id="clock">--:--</span><span id="timeBadge" class="badge live"></span><span id="wxIcon"></span><span id="wxTemp"></span><span id="wxBadge" class="badge"></span></div>
+        <div id="infoMore">
+          <div id="date"></div>
+          <div><span id="wxText"></span> <span id="wxAge"></span></div>
+          <div id="sunLine"></div>
+        </div>
+      </div>
       <button id="btnSettings" class="round" aria-label="Settings">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>
       </button>
-      <div id="mapwrap"><canvas id="minimap"></canvas><div id="dest"></div></div>
     </div>
     <div id="fps" class="hidden"></div>
     <div id="stick"><div id="knob"></div></div>

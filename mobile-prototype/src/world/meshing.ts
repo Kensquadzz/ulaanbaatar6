@@ -149,8 +149,32 @@ export function ringArea(ring: [number, number][]): number {
 
 export interface BuildingMesh extends MeshData { colliders: Collider[]; roofArea: number }
 
-/** Extrudes every real footprint to its height (source or flagged estimate). */
-export function buildBuildings(buildings: BuildingData[], cx: number, cy: number): BuildingMesh {
+function inRing(ring: [number, number][], e: number, n: number): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i], b = ring[j];
+    if ((a[1] > n) !== (b[1] > n) && e < ((b[0] - a[0]) * (n - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
+  }
+  return inside;
+}
+/** Lowest and highest terrain under a footprint: its corners plus an 8 m lattice of interior points. */
+export function groundRange(ring: [number, number][], hAt: HeightFn): [number, number] {
+  let lo = Infinity, hi = -Infinity, e0 = Infinity, e1 = -Infinity, n0 = Infinity, n1 = -Infinity;
+  const take = (e: number, n: number) => { const h = hAt(e, n); if (h < lo) lo = h; if (h > hi) hi = h; };
+  for (const p of ring) { take(p[0], p[1]); e0 = Math.min(e0, p[0]); e1 = Math.max(e1, p[0]); n0 = Math.min(n0, p[1]); n1 = Math.max(n1, p[1]); }
+  const S = 8;
+  for (let n = Math.ceil(n0 / S) * S; n <= n1; n += S) for (let e = Math.ceil(e0 / S) * S; e <= e1; e += S) if (inRing(ring, e, n)) take(e, n);
+  return [lo, hi];
+}
+
+/**
+ * Extrudes every real footprint to its height (source or flagged estimate).
+ * The terrain tiles are a surface model: in the city they already bulge under large buildings, and a
+ * building placed at its lowest corner ends up buried in that bulge. With `hAt`, each building stands
+ * on the highest terrain under its footprint and its walls reach down to the lowest, so the stated
+ * height is always visible above ground. Without it, the raw `base_z` from the data is used.
+ */
+export function buildBuildings(buildings: BuildingData[], cx: number, cy: number, hAt?: HeightFn): BuildingMesh {
   const pos: number[] = [], nor: number[] = [], uvs: number[] = [], col: number[] = [], idx: number[] = [];
   const colliders: Collider[] = [];
   const e0 = cx * CHUNK_M, n0 = cy * CHUNK_M;
@@ -162,14 +186,18 @@ export function buildBuildings(buildings: BuildingData[], cx: number, cy: number
     const shade = 0.9 + ((h >>> 8) % 100) / 500;
     const cr = srgb((hex >> 16) & 255) * shade, cg = srgb((hex >> 8) & 255) * shade, cb = srgb(hex & 255) * shade;
     const isGer = b.class === 'ger';
-    const windows = !isGer && b.height >= 4.5 && b.class !== 'garage' && b.class !== 'garages';
-    const baseY = b.base_z - ORIGIN_GROUND_M, topY = baseY + b.height;
+    const windowed = !isGer && b.class !== 'garage' && b.class !== 'garages';
+    const dataBase = b.base_z - ORIGIN_GROUND_M;
     const uOff = (h % TEX_CELLS) / TEX_CELLS, vOff = ((h >>> 4) % TEX_CELLS) / TEX_CELLS;
     for (const src of b.rings) {
       if (src.length < 3) continue;
       const area = ringArea(src);
       if (Math.abs(area) < 0.5) continue;
       const ring = area > 0 ? src : src.slice().reverse();      // counter-clockwise seen from above
+      let baseY = dataBase, topY = dataBase + b.height;
+      if (hAt) { const [lo, hi] = groundRange(ring, hAt); baseY = Math.min(dataBase, lo); topY = Math.max(dataBase, hi) + b.height; }
+      const wallH = topY - baseY;
+      const windows = windowed && topY - dataBase >= 4.5;
       colliders.push(makeCollider(ring, baseY - 0.5, topY));
       // walls
       let run = 0;
@@ -185,7 +213,7 @@ export function buildBuildings(buildings: BuildingData[], cx: number, cy: number
         for (let k = 0; k < 4; k++) { nor.push(nx, 0, nz); col.push(cr, cg, cb); }
         if (windows) {
           const u0 = run / WINDOW_W / TEX_CELLS + uOff, u1 = (run + len) / WINDOW_W / TEX_CELLS + uOff;
-          const vTop = b.height / FLOOR_H / TEX_CELLS + vOff, vBot = -0.5 / FLOOR_H / TEX_CELLS + vOff;
+          const vTop = wallH / FLOOR_H / TEX_CELLS + vOff, vBot = -0.5 / FLOOR_H / TEX_CELLS + vOff;
           uvs.push(u0, vBot, u1, vBot, u1, vTop, u0, vTop);
         } else {
           for (let k = 0; k < 4; k++) uvs.push(0.004, 0.004);    // a plain wall texel

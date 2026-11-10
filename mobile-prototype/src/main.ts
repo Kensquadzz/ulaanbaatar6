@@ -260,6 +260,7 @@ async function boot() {
   // small hook for automated tests and performance captures (scripts/perf.mjs)
   (window as any).__ub6 = {
     stats: () => ({ ...stats, e: player.e, n: player.n, y: player.y, speed: player.speed, grounded: player.grounded, yaw: follow.yaw, near: chunks.nearProgress(), colliders: chunks.colliders.count, pending: !!pendingPlace }),
+    place: (e: number, n: number) => { pendingPlace = { e, n }; player.e = e; player.n = n; },
     travel: (key: string) => { const l = landmarks[key]; if (l) { pendingPlace = { e: l.east, n: l.north }; player.e = l.east; player.n = l.north; } },
     setTime: (hour: number | null) => { timeLive = hour === null; if (hour !== null) freeHour = hour; hudTimer = 0; },
     setWeather: (w: WeatherChoice) => { weatherChoice = w; },

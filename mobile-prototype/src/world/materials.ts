@@ -33,7 +33,7 @@ function facadeTextures() {
       grad.addColorStop(0, '#a3b9cb'); grad.addColorStop(1, '#5d7186');
       g.fillStyle = grad; g.fillRect(x, y, w, h);
       g.fillStyle = '#d9d9d4'; g.fillRect(x + w / 2 - 1, y, 2, h);                // mullion
-      if (r() < 0.38) {                                                           // lit at night
+      if (r() < 0.5) {                                                           // lit at night
         const warm = r();
         eg.fillStyle = warm < 0.7 ? '#ffc777' : warm < 0.9 ? '#ffe9c4' : '#bcd7ff';
         eg.globalAlpha = 0.55 + r() * 0.45;
@@ -139,7 +139,7 @@ export function createMaterials(q: Quality): Materials {
       m.addEventListener('dispose', () => grounds.delete(m));
       return m;
     },
-    setNight(n) { (building as THREE.MeshStandardMaterial).emissiveIntensity = n * 0.85; },
+    setNight(n) { (building as THREE.MeshStandardMaterial).emissiveIntensity = n * 1.25; },
     setSnow(s) { snow.value = s; },
     dispose() { building.dispose(); road.dispose(); backdrop.dispose(); f.map.dispose(); f.emissive.dispose(); roadTex.dispose(); detail.value.dispose(); grounds.forEach((m) => m.dispose()); },
   };

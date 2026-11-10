@@ -172,7 +172,7 @@ export class ChunkManager {
     const tex = paintGround(d, near ? this.q.groundTexNear : this.q.groundTexFar);
     add(buildTerrain(grid, n, e.cx, e.cy, (ee, nn) => this.height.heightAt(ee, nn)), this.mats.makeGround(tex), true, false, true);
     add(buildRoads(d.roads, e.cx, e.cy, hAt, near), this.mats.road, false, false, true);
-    const b = buildBuildings(d.buildings, e.cx, e.cy);
+    const b = buildBuildings(d.buildings, e.cx, e.cy, hAt);
     add(b, this.mats.building, false, near, near);
     if (near) this.colliders.set(e.key, b.colliders);
     group.updateMatrixWorld(true);

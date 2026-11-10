@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CHUNK_M, ORIGIN_GROUND_M } from '../src/core/geo';
 import { ColliderSet, makeCollider, pointInRing, pushOut, type Collider } from '../src/world/collision';
-import { buildBuildings, buildRoads, buildTerrain, ringArea, type MeshData } from '../src/world/meshing';
+import { buildBuildings, buildRoads, buildTerrain, groundRange, ringArea, type MeshData } from '../src/world/meshing';
 import { HeightField } from '../src/world/terrain';
 import type { ChunkData, Manifest } from '../src/world/types';
 import { Player, RADIUS, type World } from '../src/player/player';
@@ -98,6 +98,21 @@ describe('collision', () => {
     expect(q[0]).toBeCloseTo(10.35);
     const far: [number, number] = [-3, 5];
     expect(pushOut(c, far, 0.35)).toBe(false);
+  });
+
+  it('never buries a building in the terrain bulge under it (Government Palace)', () => {
+    const hf = new HeightField(manifest.height_grid_n);
+    for (let x = -2; x <= 1; x++) for (let y = -1; y <= 1; y++) hf.setChunk(x, y, load(x, y).height_grid_dm);
+    const hAt = (e: number, n: number) => hf.heightAt(e, n);
+    const palace = load(-1, 0).buildings.filter((b) => b.name === 'Засгийн газрын ордон');
+    expect(palace.length).toBe(1);
+    const [lo, hi] = groundRange(palace[0].rings[0], hAt);
+    expect(hi - lo).toBeGreaterThan(palace[0].height);          // the raw placement would be buried
+    const m = buildBuildings(palace, -1, 0, hAt);
+    let top = -Infinity, bottom = Infinity;
+    for (let i = 1; i < m.position.length; i += 3) { top = Math.max(top, m.position[i]); bottom = Math.min(bottom, m.position[i]); }
+    expect(top).toBeCloseTo(hi + palace[0].height, 3);
+    expect(bottom).toBeLessThanOrEqual(lo);
   });
 
   it('stops the player at a real building wall and lets them slide along it', () => {

@@ -70,7 +70,9 @@ function ramp(el: number, zenith: THREE.Color, horizon: THREE.Color) {
   const t = Math.max(0, Math.min(1, (el - a[0]) / (b[0] - a[0])));
   zenith.copy(a[1]).lerp(b[1], t); horizon.copy(a[2]).lerp(b[2], t);
 }
-const NIGHT_FILL = new THREE.Color(0x7f93c9);   // cool fill so the city stays readable at night (not a modelled moon)
+const NIGHT_FILL = new THREE.Color(0x9fb0de);   // cool fill so the city stays readable at night (not a modelled moon)
+const NIGHT_KEY = new THREE.Color(0xb9c8f2);    // soft directional night light that gives walls shape (stylised, not the real moon)
+const NIGHT_DIR = new THREE.Vector3(-0.45, 0.62, 0.64).normalize();
 const smooth = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 export class SkySystem {
@@ -132,19 +134,22 @@ export class SkySystem {
     u.uSunDisc.value = smooth(-2, 1, el);
 
     const direct = smooth(-1, 12, el) * (1 - 0.8 * w.cloud) * (1 - 0.6 * w.fog);
-    this.sun.color.copy(u.uSunColor.value);
-    this.sun.intensity = 3.2 * direct;
-    this.sun.visible = direct > 0.01;
-    this.sun.castShadow = this.shadowMap > 0 && direct > 0.05;
-    const dir = el > 1 ? this.sunDir : new THREE.Vector3(this.sunDir.x, 0.02, this.sunDir.z).normalize();
+    // After dusk the same light becomes a dim, shadowless night key so facades are not flat silhouettes.
+    const nightKey = this.night * 0.9 * (1 - 0.4 * w.cloud);
+    const useNight = nightKey > 3.2 * direct;
+    this.sun.color.copy(useNight ? NIGHT_KEY : u.uSunColor.value);
+    this.sun.intensity = useNight ? nightKey : 3.2 * direct;
+    this.sun.visible = this.sun.intensity > 0.01;
+    this.sun.castShadow = this.shadowMap > 0 && !useNight && direct > 0.05;
+    const dir = useNight ? NIGHT_DIR : el > 1 ? this.sunDir : new THREE.Vector3(this.sunDir.x, 0.02, this.sunDir.z).normalize();
     this.sun.target.position.copy(focus);
     this.sun.position.copy(focus).addScaledVector(dir, 300);
     this.sun.target.updateMatrixWorld();
 
     this.hemi.color.copy(u.uZenith.value).lerp(u.uHorizon.value, 0.5);
-    this.hemi.groundColor.setRGB(0.4, 0.37, 0.32).multiplyScalar(0.3 + 0.7 * this.daylight);
-    // never pitch black: a faint cool fill keeps the city readable at night
-    this.hemi.intensity = 1.0 + 1.5 * this.daylight + 0.5 * w.cloud * this.daylight;
+    this.hemi.groundColor.setRGB(0.4, 0.37, 0.32).multiplyScalar(0.3 + 0.7 * this.daylight).lerp(NIGHT_FILL, 0.35 * this.night);
+    // never pitch black: a cool fill keeps the city readable at night
+    this.hemi.intensity = 1.0 + 1.5 * this.daylight + 0.5 * w.cloud * this.daylight + 1.0 * this.night;
     if (this.daylight < 0.3) this.hemi.color.lerp(NIGHT_FILL, 1 - this.daylight / 0.3);
 
     this.fog.color.copy(u.uHorizon.value);
