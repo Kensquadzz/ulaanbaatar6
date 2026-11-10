@@ -1,0 +1,16 @@
+core/build/
+build/
+unreal/Ulaanbaatar6/Binaries/
+unreal/Ulaanbaatar6/Intermediate/
+unreal/Ulaanbaatar6/Saved/
+unreal/Ulaanbaatar6/DerivedDataCache/
+unreal/Ulaanbaatar6/Content/UB6Data/tiles/
+unreal/Ulaanbaatar6/.vs/
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+.env
+ub6_weather_state.json
+__pycache__/
+.pytest_cache/

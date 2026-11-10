@@ -1,0 +1,5 @@
+pyarrow>=15
+numpy
+pillow
+shapely>=2.0
+pytest

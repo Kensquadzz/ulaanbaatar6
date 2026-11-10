@@ -1,0 +1,17 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.5",
+	"Category": "",
+	"Description": "ULAANBAATAR 6 MOBILE - real-world open world of Ulaanbaatar for iOS and Android.",
+	"Modules": [
+		{ "Name": "UB6Core", "Type": "Runtime", "LoadingPhase": "PreDefault" },
+		{ "Name": "Ulaanbaatar6", "Type": "Runtime", "LoadingPhase": "Default", "AdditionalDependencies": [ "Engine", "UB6Core" ] }
+	],
+	"Plugins": [
+		{ "Name": "EnhancedInput", "Enabled": true },
+		{ "Name": "ChaosVehiclesPlugin", "Enabled": true },
+		{ "Name": "ProceduralMeshComponent", "Enabled": true },
+		{ "Name": "ModelingToolsEditorMode", "Enabled": true, "TargetAllowList": [ "Editor" ] }
+	],
+	"TargetPlatforms": [ "Android", "IOS" ]
+}
