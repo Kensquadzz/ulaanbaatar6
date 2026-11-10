@@ -1,0 +1,10 @@
+{
+  "name": "ULAANBAATAR 6 Mobile Prototype",
+  "short_name": "UB6",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b1020",
+  "theme_color": "#0b1020",
+  "start_url": "./",
+  "icons": [{ "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

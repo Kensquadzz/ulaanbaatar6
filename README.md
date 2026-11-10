@@ -15,3 +15,7 @@ live clock and live weather.
 | `docs/` | Status, local setup, testing, dependencies | |
 
 Start with `docs/STATUS.md`, then `docs/LOCAL_SETUP.md`.
+
+## iPhone web prototype
+
+`mobile-prototype/` is a separate Three.js build of the same slice that runs in iPhone Safari. It does not replace the Unreal project. See `mobile-prototype/README.md`.

@@ -25,6 +25,14 @@ This file separates what has been **tested**, what is **written but untested**, 
 
 Run everything with `scripts/test_all.sh`.
 
+## iPhone web prototype (`mobile-prototype/`, added 2026-11-10)
+
+A separate Three.js prototype for iPhone Safari; the Unreal project is unchanged. It streams the
+same real tiles and has a third-person character, touch controls, collision, mini-map, live clock,
+sun and weather. Verified in the cloud: production build, 23 unit tests, and a 10-check end-to-end
+run in headless Chromium driving the touch controls. **Not verified: any real iPhone**; frame rate
+on a device is unknown. Buildings and the character are labelled placeholders. See `mobile-prototype/README.md`.
+
 ## Written, not yet compiled or run
 
 - The whole Unreal project in `unreal/Ulaanbaatar6/` (about 2,200 lines of C++ plus configs).
