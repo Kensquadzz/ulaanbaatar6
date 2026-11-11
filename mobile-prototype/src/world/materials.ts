@@ -178,7 +178,7 @@ function roadTexture() {
   // column 5: wide one-way carriageway, lane dashes and edge lines
   dash(col * 5 + col / 3, 2.5); dash(col * 5 + (2 * col) / 3, 2.5); line(col * 5 + 6, 2.5); line(col * 6 - 6, 2.5);
   const t = new THREE.CanvasTexture(c);
-  t.wrapS = THREE.ClampToEdgeWrapping; t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  t.wrapS = THREE.ClampToEdgeWrapping; t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return t;
 }
 
@@ -265,7 +265,8 @@ export function createMaterials(q: Quality): Materials {
   building.customProgramCacheKey = () => 'facade';
   const roadTex = roadTexture();
   const roadOpts = { map: roadTex, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 };
-  const road = snowPatch(q.pbr ? new THREE.MeshStandardMaterial({ ...roadOpts, roughness: 0.92, metalness: 0 }) : new THREE.MeshLambertMaterial(roadOpts), 0.45);
+  // Ground and roads are matte, so the cheaper Lambert model looks the same on every profile.
+  const road = snowPatch(new THREE.MeshLambertMaterial(roadOpts), 0.45);
   const backdrop = snowPatch(new THREE.MeshLambertMaterial({ vertexColors: true }), 0.9);
   // Streetlights: unlit poles, a glowing head, an additive pool on the ground and a halo sprite.
   // No real light sources are created, so the cost does not grow with the number of lamps.
@@ -282,7 +283,7 @@ export function createMaterials(q: Quality): Materials {
   return {
     building, road, backdrop, lampPole, lampHead, lampPool, lampHalo,
     makeGround(map) {
-      const m = groundPatch(q.pbr ? new THREE.MeshStandardMaterial({ map, roughness: 0.96, metalness: 0 }) : new THREE.MeshLambertMaterial({ map }));
+      const m = groundPatch(new THREE.MeshLambertMaterial({ map }));
       grounds.add(m);
       m.addEventListener('dispose', () => grounds.delete(m));
       return m;

@@ -41,6 +41,13 @@ streetlights, new night sky, a jointed procedural character, camera and HUD poli
 unchanged. Tested headless only (build, unit tests, end-to-end touch checks); not yet run on a real iPhone
 and not deployed. The real/procedural split is in `mobile-prototype/README.md`.
 
+### V1.1 mobile performance (branch `feature/iphone-performance-v1-1`, 2026-11-11)
+
+- Audit and fixes are described in `mobile-prototype/README.md` ("V1.1 performance audit"). Draw calls per frame fell from 243 to 100 (HIGH), 169 to 52 (MEDIUM) and 91 to 31 (LOW) at the same Peace Avenue view.
+- Tested in headless Chromium only: build, 29 unit tests, and the end-to-end script (joystick, two-finger camera drag while walking, jump, run, touch response, simulated safe-area insets, 44 pt touch targets, portrait rotate prompt, streaming memory).
+- NOT tested: anything on a physical iPhone. Frame rate, heat, real notch and home-bar insets, Safari address-bar behaviour and touch feel all need the device.
+- Published only as a Vercel preview deployment of this branch. The production link was not changed.
+
 ## Written, not yet compiled or run
 
 - The whole Unreal project in `unreal/Ulaanbaatar6/` (about 2,200 lines of C++ plus configs).

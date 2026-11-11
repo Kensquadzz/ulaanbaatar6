@@ -77,6 +77,7 @@ function ramp(el: number, zenith: THREE.Color, horizon: THREE.Color) {
 }
 const NIGHT_FILL = new THREE.Color(0x9aa3c0);   // cool fill so the city stays readable at night (not a modelled moon)
 const NIGHT_KEY = new THREE.Color(0xb9c8f2);    // soft directional night light that gives walls shape (stylised, not the real moon)
+const LOW_SUN = new THREE.Vector3();             // scratch, so the frame loop allocates nothing
 const NIGHT_DIR = new THREE.Vector3(-0.45, 0.62, 0.64).normalize();
 const smooth = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
@@ -146,7 +147,7 @@ export class SkySystem {
     this.sun.intensity = useNight ? nightKey : 3.2 * direct;
     this.sun.visible = this.sun.intensity > 0.01;
     this.sun.castShadow = this.shadowMap > 0 && !useNight && direct > 0.05;
-    const dir = useNight ? NIGHT_DIR : el > 1 ? this.sunDir : new THREE.Vector3(this.sunDir.x, 0.02, this.sunDir.z).normalize();
+    const dir = useNight ? NIGHT_DIR : el > 1 ? this.sunDir : LOW_SUN.set(this.sunDir.x, 0.02, this.sunDir.z).normalize();
     this.sun.target.position.copy(focus);
     this.sun.position.copy(focus).addScaledVector(dir, 300);
     this.sun.target.updateMatrixWorld();
