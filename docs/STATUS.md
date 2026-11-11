@@ -25,6 +25,29 @@ This file separates what has been **tested**, what is **written but untested**, 
 
 Run everything with `scripts/test_all.sh`.
 
+## iPhone web prototype (`mobile-prototype/`, added 2026-11-10)
+
+A separate Three.js prototype for iPhone Safari; the Unreal project is unchanged. It streams the
+same real tiles and has a third-person character, touch controls, collision, mini-map, live clock,
+sun and weather. Verified in the cloud: production build, 23 unit tests, and a 10-check end-to-end
+run in headless Chromium driving the touch controls. **Not verified: any real iPhone**; frame rate
+on a device is unknown. Buildings and the character are labelled placeholders. See `mobile-prototype/README.md`.
+
+### Visual upgrade V1 (branch `feature/visual-upgrade-v1`, 2026-11-10)
+
+Facade styles and estimated heights for default-only buildings, sidewalks, curbs, crossings, instanced
+streetlights, new night sky, a jointed procedural character, camera and HUD polish, real district names
+(`data/tiles/districts.json`, built by `pipeline/ub6pipeline/build_districts.py`). Existing tile files are
+unchanged. Tested headless only (build, unit tests, end-to-end touch checks); not yet run on a real iPhone
+and not deployed. The real/procedural split is in `mobile-prototype/README.md`.
+
+### V1.1 mobile performance (branch `feature/iphone-performance-v1-1`, 2026-11-11)
+
+- Audit and fixes are described in `mobile-prototype/README.md` ("V1.1 performance audit"). Draw calls per frame fell from 243 to 100 (HIGH), 169 to 52 (MEDIUM) and 91 to 31 (LOW) at the same Peace Avenue view.
+- Tested in headless Chromium only: build, 29 unit tests, and the end-to-end script (joystick, two-finger camera drag while walking, jump, run, touch response, simulated safe-area insets, 44 pt touch targets, portrait rotate prompt, streaming memory).
+- NOT tested: anything on a physical iPhone. Frame rate, heat, real notch and home-bar insets, Safari address-bar behaviour and touch feel all need the device.
+- Published only as a Vercel preview deployment of this branch. The production link was not changed.
+
 ## Written, not yet compiled or run
 
 - The whole Unreal project in `unreal/Ulaanbaatar6/` (about 2,200 lines of C++ plus configs).
