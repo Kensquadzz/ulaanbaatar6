@@ -18,7 +18,8 @@ const LAND: Record<string, [string, number]> = {
 const WATER = '#55748a';
 const WATER_LINE_M: Record<string, number> = { river: 9, stream: 3, drain: 2, ditch: 1.5, canal: 3 };
 
-export function paintGround(c: ChunkData, size: number): THREE.CanvasTexture {
+const ROAD_FAR = '#45464b';
+export function paintGround(c: ChunkData, size: number, bakeRoads = false): THREE.CanvasTexture {
   const cv = document.createElement('canvas');
   cv.width = cv.height = size;
   const g = cv.getContext('2d')!;
@@ -39,6 +40,30 @@ export function paintGround(c: ChunkData, size: number): THREE.CanvasTexture {
     }
   };
   c.water.forEach(water);
+  // paved squares: slab joints every 4 m, clipped to the real plaza / pedestrian polygon
+  for (const a of areas) {
+    if (a.class !== 'plaza' && a.class !== 'pedestrian') continue;
+    g.save(); path(a.ring!); g.closePath(); g.clip();
+    g.strokeStyle = 'rgba(0,0,0,0.10)'; g.lineWidth = 1;
+    const step = Math.max(4, 4 * k);
+    for (let x = 0; x <= size; x += step) { g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, size); g.stroke(); }
+    for (let y = 0; y <= size; y += step) { g.beginPath(); g.moveTo(0, y + 0.5); g.lineTo(size, y + 0.5); g.stroke(); }
+    g.restore();
+  }
+  if (bakeRoads) {                       // distant chunks: real carriageways drawn at their mapped width
+    g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = ROAD_FAR;
+    for (const r of c.roads) {
+      if (!r.drivable || r.pts.length < 2) continue;
+      g.lineWidth = Math.max(1.2, r.width * k);
+      g.beginPath(); r.pts.forEach((p, i) => (i ? g.lineTo(X(p[0]), Y(p[1])) : g.moveTo(X(p[0]), Y(p[1])))); g.stroke();
+    }
+  }
+  // baked contact shadow: the ground darkens toward every building footprint
+  g.lineJoin = 'round';
+  for (const w of [7, 4, 2]) {
+    g.strokeStyle = 'rgba(12,14,22,0.10)'; g.lineWidth = Math.max(1.5, w * k);
+    for (const b of c.buildings) for (const ring of b.rings) { if (ring.length < 3) continue; path(ring); g.closePath(); g.stroke(); }
+  }
   // fine grain so large flat areas are not a single flat colour
   let s = ((c.chunk[0] * 73856093) ^ (c.chunk[1] * 19349663)) >>> 0;
   const r = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
@@ -50,5 +75,8 @@ export function paintGround(c: ChunkData, size: number): THREE.CanvasTexture {
   }
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 2;
+  // The canvas would otherwise stay in memory next to the GPU copy for as long as the chunk lives.
+  t.onUpdate = () => { cv.width = cv.height = 0; t.onUpdate = null as unknown as () => void; };
+  t.userData.pixels = size * size;
   return t;
 }

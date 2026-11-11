@@ -31,12 +31,17 @@ void main() {
   float sd = max(dot(d, uSunDir), 0.0);
   col += uSunColor * (pow(sd, 6.0) * 0.18 + pow(sd, 90.0) * 0.5) * uSunDisc * (1.0 - uCloud * 0.8);
   col += uSunColor * smoothstep(0.99955, 0.99985, sd) * 14.0 * uSunDisc * (1.0 - uCloud);
-  if (uNight > 0.01 && d.y > 0.0) {            // procedural stars (decorative, not a star catalogue)
-    vec2 g = d.xz / (d.y + 0.35) * 90.0;
-    vec2 c = floor(g);
-    float r = hash(c);
-    float star = step(0.985, r) * smoothstep(0.35, 0.0, length(fract(g) - 0.5 - (vec2(hash(c + 3.1), hash(c + 7.7)) - 0.5) * 0.5));
-    col += vec3(star) * uNight * (0.6 + 0.4 * hash(c + 1.3)) * (1.0 - uCloud) * smoothstep(0.0, 0.25, d.y);
+  if (uNight > 0.01) {
+    // city glow: sodium-warm haze hugging the horizon, as seen from inside a lit city
+    col += vec3(0.12, 0.085, 0.06) * uNight * pow(1.0 - h, 9.0) * (1.0 + 0.6 * uCloud);
+    if (d.y > 0.0) {                                    // sparse, faint stars (decorative, not a star catalogue)
+      vec2 g = d.xz / (d.y + 0.35) * 150.0;
+      vec2 c = floor(g);
+      float r = hash(c);
+      float star = step(0.9935, r) * smoothstep(0.22, 0.0, length(fract(g) - 0.5 - (vec2(hash(c + 3.1), hash(c + 7.7)) - 0.5) * 0.5));
+      vec3 tint = mix(vec3(0.75, 0.82, 1.0), vec3(1.0, 0.9, 0.78), hash(c + 5.3));
+      col += tint * star * uNight * (0.12 + 0.5 * hash(c + 1.3) * hash(c + 2.9)) * (1.0 - uCloud) * smoothstep(0.08, 0.55, d.y);
+    }
   }
   if (uCloud > 0.02 && d.y > 0.0) {
     vec2 p = d.xz / (d.y + 0.12) * 1.6 + vec2(uTime * 0.006, uTime * 0.002);
@@ -54,8 +59,8 @@ void main() {
 const C = (hex: number) => new THREE.Color(hex);
 // [sun elevation in degrees, zenith, horizon]
 const RAMP: [number, THREE.Color, THREE.Color][] = [
-  [-18, C(0x03060f), C(0x0c1424)],
-  [-10, C(0x070d20), C(0x141f3a)],
+  [-18, C(0x060a16), C(0x10172a)],
+  [-10, C(0x0a1126), C(0x18233f)],
   [-4, C(0x142447), C(0x4a4466)],
   [-1, C(0x25407a), C(0xc5725a)],
   [2, C(0x3464a8), C(0xe9a070)],
@@ -70,8 +75,9 @@ function ramp(el: number, zenith: THREE.Color, horizon: THREE.Color) {
   const t = Math.max(0, Math.min(1, (el - a[0]) / (b[0] - a[0])));
   zenith.copy(a[1]).lerp(b[1], t); horizon.copy(a[2]).lerp(b[2], t);
 }
-const NIGHT_FILL = new THREE.Color(0x9fb0de);   // cool fill so the city stays readable at night (not a modelled moon)
+const NIGHT_FILL = new THREE.Color(0x9aa3c0);   // cool fill so the city stays readable at night (not a modelled moon)
 const NIGHT_KEY = new THREE.Color(0xb9c8f2);    // soft directional night light that gives walls shape (stylised, not the real moon)
+const LOW_SUN = new THREE.Vector3();             // scratch, so the frame loop allocates nothing
 const NIGHT_DIR = new THREE.Vector3(-0.45, 0.62, 0.64).normalize();
 const smooth = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
@@ -141,7 +147,7 @@ export class SkySystem {
     this.sun.intensity = useNight ? nightKey : 3.2 * direct;
     this.sun.visible = this.sun.intensity > 0.01;
     this.sun.castShadow = this.shadowMap > 0 && !useNight && direct > 0.05;
-    const dir = useNight ? NIGHT_DIR : el > 1 ? this.sunDir : new THREE.Vector3(this.sunDir.x, 0.02, this.sunDir.z).normalize();
+    const dir = useNight ? NIGHT_DIR : el > 1 ? this.sunDir : LOW_SUN.set(this.sunDir.x, 0.02, this.sunDir.z).normalize();
     this.sun.target.position.copy(focus);
     this.sun.position.copy(focus).addScaledVector(dir, 300);
     this.sun.target.updateMatrixWorld();
@@ -149,10 +155,11 @@ export class SkySystem {
     this.hemi.color.copy(u.uZenith.value).lerp(u.uHorizon.value, 0.5);
     this.hemi.groundColor.setRGB(0.4, 0.37, 0.32).multiplyScalar(0.3 + 0.7 * this.daylight).lerp(NIGHT_FILL, 0.35 * this.night);
     // never pitch black: a cool fill keeps the city readable at night
-    this.hemi.intensity = 1.0 + 1.5 * this.daylight + 0.5 * w.cloud * this.daylight + 1.0 * this.night;
+    this.hemi.intensity = 1.0 + 1.5 * this.daylight + 0.5 * w.cloud * this.daylight + 0.75 * this.night;
     if (this.daylight < 0.3) this.hemi.color.lerp(NIGHT_FILL, 1 - this.daylight / 0.3);
 
     this.fog.color.copy(u.uHorizon.value);
+    this.fog.color.r += 0.05 * this.night; this.fog.color.g += 0.034 * this.night; this.fog.color.b += 0.02 * this.night;   // matches the city glow
     const reach = Math.max(350, viewDistance);
     this.fog.density = (0.95 + 2.6 * w.fog + 0.5 * Math.max(w.snow, w.rain)) / reach;
     this.dome.position.copy(camera.position);

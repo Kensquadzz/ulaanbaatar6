@@ -123,12 +123,17 @@ export class Hud {
     $('wxAge').textContent = `${Math.max(0, Math.round((nowUnix - s.fetchedAt!) / 60))} ${t('ago')} · ${s.provider}`;
   }
 
-  setStreet(name: string | null, sub: string | null) {
+  setStreet(name: string | null, sub: string | null, district: string | null = null) {
     const el = $('street');
-    el.textContent = name ?? '';
-    if (sub) { const s = document.createElement('small'); s.textContent = sub; el.appendChild(s); }
+    el.textContent = '';
+    const line = (cls: string, text: string) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; el.appendChild(d); };
+    if (district) line('district', district);
+    if (name) line('name', name);
+    if (sub) line('sub', sub);
   }
-  setDest(text: string) { $('dest').textContent = text; }
+  setDest(name: string, dist: string, gps: string) {
+    $('destName').textContent = name; $('destDist').textContent = dist; $('gps').textContent = gps;
+  }
 
   /** North-relative mini-map rotated so the camera direction is up. All geometry is the real chunk data. */
   drawMinimap(chunks: ChunkData[], pe: number, pn: number, heading: number, camYaw: number,
@@ -137,16 +142,16 @@ export class Hud {
     if (this.mapPx !== css * dpr) { this.mapPx = css * dpr; this.map.width = this.map.height = this.mapPx; }
     const g = this.ctx, S = this.mapPx, R = 230, k = S / (2 * R);
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.fillStyle = '#2b3342'; g.fillRect(0, 0, S, S);
+    g.fillStyle = '#232a36'; g.fillRect(0, 0, S, S);
     g.translate(S / 2, S / 2); g.scale(k, -k); g.rotate(camYaw); g.translate(-pe, -pn);
     const reach = R * 1.45;
     const poly = (pts: [number, number][]) => { g.beginPath(); pts.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); };
     g.lineCap = 'round'; g.lineJoin = 'round';
     for (const c of chunks) {
-      for (const a of c.land_use) if (a.ring && (a.class === 'park' || a.class === 'grass' || a.class === 'pitch' || a.class === 'garden')) { poly(a.ring); g.fillStyle = '#3c5340'; g.fill(); }
+      for (const a of c.land_use) if (a.ring && (a.class === 'park' || a.class === 'grass' || a.class === 'pitch' || a.class === 'garden')) { poly(a.ring); g.fillStyle = '#2f4636'; g.fill(); }
       for (const a of c.water) { if (a.ring) { poly(a.ring); g.fillStyle = '#3f6f93'; g.fill(); } else if (a.line) { poly(a.line); g.strokeStyle = '#3f6f93'; g.lineWidth = 5; g.stroke(); } }
     }
-    g.fillStyle = '#566178';
+    g.fillStyle = '#465066';
     for (const c of chunks) for (const b of c.buildings) {
       const p = b.rings[0][0];
       if (Math.abs(p[0] - pe) > reach || Math.abs(p[1] - pn) > reach) continue;
@@ -158,7 +163,7 @@ export class Hud {
       const p = r.pts[0];
       if (Math.abs(p[0] - pe) > reach + 200 || Math.abs(p[1] - pn) > reach + 200) continue;
       g.beginPath(); r.pts.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])));
-      g.strokeStyle = major ? '#e8ebf2' : '#8d96a8'; g.lineWidth = (major ? ROAD_W[r.class] ?? 1.5 : 0.8) / k * (S / 236);
+      g.strokeStyle = major ? (ROAD_W[r.class] >= 3 ? '#f1f3f7' : '#aab2c2') : '#69728a'; g.lineWidth = (major ? ROAD_W[r.class] ?? 1.5 : 0.6) / k * (S / 236);
       g.stroke();
     }
     g.fillStyle = '#f2a23a';
@@ -178,7 +183,10 @@ export class Hud {
     const nx = -Math.sin(camYaw), ny = -Math.cos(camYaw);
     g.fillStyle = '#fff'; g.font = `700 ${11 * u}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText('N', nx * (S / 2 - 9 * u), ny * (S / 2 - 9 * u));
-    // player arrow
+    // view cone, then the player arrow
+    const cone = g.createRadialGradient(0, 0, 0, 0, 0, 34 * u);
+    cone.addColorStop(0, 'rgba(242,162,58,0.42)'); cone.addColorStop(1, 'rgba(242,162,58,0)');
+    g.fillStyle = cone; g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, 34 * u, -Math.PI / 2 - 0.5, -Math.PI / 2 + 0.5); g.closePath(); g.fill();
     g.rotate(heading - camYaw);
     g.fillStyle = '#fff'; g.strokeStyle = '#1b2230'; g.lineWidth = 1.5 * u;
     g.beginPath(); g.moveTo(0, -8 * u); g.lineTo(6 * u, 7 * u); g.lineTo(0, 3.5 * u); g.lineTo(-6 * u, 7 * u); g.closePath(); g.fill(); g.stroke();

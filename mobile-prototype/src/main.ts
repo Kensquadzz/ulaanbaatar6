@@ -18,6 +18,54 @@ import { Precipitation } from './world/precip';
 import { SkySystem } from './world/sky';
 import type { ChunkData, Landmark, Manifest, Overview } from './world/types';
 
+import { pointInRing } from './core/geo';
+interface District { name: string; name_en: string; rings: [number, number][][] }
+/** Counts what the main pass would draw right now, by kind (frustum-tested like the renderer does). */
+function auditScene(scene: THREE.Scene, camera: THREE.Camera, renderer: THREE.WebGLRenderer) {
+  const fr = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+  const kinds: Record<string, { calls: number; tris: number }> = {};
+  const sphere = new THREE.Sphere();
+  const walk = (o: THREE.Object3D, kind: string) => {
+    if (!o.visible) return;
+    kind = (o.userData.kind as string) ?? kind;
+    const m = o as THREE.Mesh;
+    if (m.isMesh || (o as THREE.Points).isPoints) {
+      const mat = m.material as THREE.Material;
+      let seen = mat.visible;
+      if (seen && o.frustumCulled) {
+        const im = o as THREE.InstancedMesh;
+        if (im.isInstancedMesh) { if (!im.boundingSphere) im.computeBoundingSphere(); sphere.copy(im.boundingSphere!); }
+        else { if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere(); sphere.copy(m.geometry.boundingSphere!); }
+        seen = fr.intersectsSphere(sphere.applyMatrix4(o.matrixWorld));
+      }
+      if (seen) {
+        const k = (kinds[kind] ??= { calls: 0, tris: 0 });
+        const g = m.geometry, n = g.index ? g.index.count : g.getAttribute('position').count;
+        k.calls++; k.tris += m.isMesh ? Math.round((n / 3) * ((o as THREE.InstancedMesh).isInstancedMesh ? (o as THREE.InstancedMesh).count : 1)) : 0;
+      }
+    }
+    for (const c of o.children) walk(c, kind);
+  };
+  walk(scene, 'other');
+  const main = Object.values(kinds).reduce((a, k) => a + k.calls, 0);
+  // Estimated GPU memory of what is loaded (not only what is in view): vertex/index buffers and
+  // colour textures with mipmaps. An estimate from sizes, because WebGL reports no real figure.
+  const geos = new Set<THREE.BufferGeometry>(), texs = new Set<THREE.Texture>();
+  scene.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.geometry) geos.add(m.geometry);
+    const map = (m.material as THREE.MeshLambertMaterial | undefined)?.map;
+    if (map) texs.add(map);
+  });
+  let geoBytes = 0, texBytes = 0;
+  geos.forEach((g) => { for (const a of Object.values(g.attributes)) geoBytes += (a as THREE.BufferAttribute).array.byteLength; if (g.index) geoBytes += g.index.array.byteLength; });
+  texs.forEach((t) => { const im = t.image as { width?: number; height?: number } | undefined; texBytes += ((t.userData.pixels as number) ?? (im?.width ?? 0) * (im?.height ?? 0)) * 4 * 1.33; });
+  texBytes += (9 * 512 * 512 + 9 * 256 * 256) * 4 * 1.33;                    // the two facade texture arrays
+  const sm = renderer.shadowMap.enabled ? (scene.getObjectByProperty('isDirectionalLight', true) as THREE.DirectionalLight | undefined)?.shadow.mapSize.x ?? 0 : 0;
+  const mb = (b: number) => +(b / 1048576).toFixed(1);
+  return { kinds, memoryMB: { geometry: mb(geoBytes), textures: mb(texBytes), shadowMap: mb(sm * sm * 4), jsHeap: mb((performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? 0) }, mainPass: main, total: renderer.info.render.calls, shadowPass: renderer.info.render.calls - main,
+    textures: renderer.info.memory.textures, geometries: renderer.info.memory.geometries, programs: renderer.info.programs?.length ?? 0 };
+}
 const DATA = import.meta.env.BASE_URL + 'data/';
 const MANUAL: Record<Exclude<WeatherChoice, 'live'>, SceneWeather> = {
   clear: { cloud: 0.05, fog: 0, rain: 0, snow: 0, snowCover: 0, windMs: 1 },
@@ -39,7 +87,6 @@ async function boot() {
   }
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.info.autoReset = false;
 
   let manifest: Manifest, overview: Overview, landmarks: Record<string, Landmark>;
@@ -78,7 +125,8 @@ async function boot() {
   const sky = new SkySystem(scene, QUALITY[qName].shadowMap);
   let precip = new Precipitation(QUALITY[qName].particles);
   scene.add(precip.points);
-  const character = new Character(true);
+  const character = new Character(QUALITY[qName].pbr);
+  character.root.userData.kind = 'character';
   scene.add(character.root);
   const player = new Player();
   player.e = SPAWN.east; player.n = SPAWN.north; player.heading = Math.PI;
@@ -104,6 +152,7 @@ async function boot() {
     camera.aspect = w / h;
     // keep a comfortable horizontal view on very wide phones
     camera.fov = w / h > 2 ? 52 : 62;
+    follow?.setBaseFov(camera.fov);
     camera.updateProjectionMatrix();
   }
   function setQuality(name: QualityName) {
@@ -112,36 +161,47 @@ async function boot() {
     mats = createMaterials(q);
     chunks.setQuality(q, mats);
     old.dispose();
-    renderer.shadowMap.enabled = q.shadowMap > 0;
+    applyShadows(q);
     sky.configureShadows(q.shadowMap);
+    character.setPbr(q.pbr);
     scene.remove(precip.points); precip.points.geometry.dispose();
     precip = new Precipitation(q.particles); scene.add(precip.points);
     scene.traverse((o) => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if (m && !Array.isArray(m)) m.needsUpdate = true; });
     resize();
     noteQuality();
   }
+  function applyShadows(q: typeof QUALITY[QualityName]) {
+    renderer.shadowMap.enabled = q.shadowMap > 0;
+    renderer.shadowMap.type = q.softShadows ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+  }
   function applyQuality(c: QualityChoice) {
-    choice = c; resScale = 1; govLow = govHigh = 0;
+    choice = c; resScale = 1; govLow = govHigh = 0; promoted = demoted = false;
     setQuality(c === 'auto' ? 'medium' : c);
   }
   function noteQuality() {
     hud.setQualityNote(`${qName.toUpperCase()} · ${Math.round(resScale * 100)}% · ${renderer.domElement.width}×${renderer.domElement.height}`);
   }
-  renderer.shadowMap.enabled = QUALITY[qName].shadowMap > 0;
+  applyShadows(QUALITY[qName]);
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', () => setTimeout(resize, 250));
   resize();
 
-  // ---- frame-rate governor (auto mode): resolution first, then the preset; never above the choice
-  let govLow = 0, govHigh = 0, fpsFrames = 0, fpsTime = 0, fps = 0, worstMs = 0, warm = 0;
+  // ---- adaptive quality (AUTO only). Browsers expose no temperature reading, so the measured
+  // frame rate is the signal: a phone that heats up and throttles shows up here as falling fps.
+  // Down: resolution in steps to 70 %, then one profile lower (HIGH > MEDIUM > LOW).
+  // Up: resolution back to 100 %; one single attempt at the next profile if 55+ fps is held for
+  // 15 s, and never again after any downgrade, so the game cannot flip back and forth.
+  let govLow = 0, govHigh = 0, fpsFrames = 0, fpsTime = 0, fps = 0, worstMs = 0, warm = 0, promoted = false, demoted = false;
+  const ORDER: QualityName[] = ['low', 'medium', 'high'];
   function govern() {
-    if (choice !== 'auto' || warm < 6) return;
+    if (choice !== 'auto' || warm < 6 || paused || chunks.streaming) return;
     if (fps < TARGET_FPS - 3) { govLow++; govHigh = 0; } else if (fps > 50) { govHigh++; govLow = 0; } else { govLow = govHigh = 0; }
     if (govLow >= 2) {
       govLow = 0;
-      if (resScale > 0.62) { resScale = Math.max(0.6, resScale - 0.15); resize(); noteQuality(); }
-      else if (qName !== 'low') { resScale = 0.85; setQuality('low'); }
+      if (resScale > 0.72) { resScale = Math.max(0.7, resScale - 0.15); resize(); noteQuality(); }
+      else if (qName !== 'low') { demoted = true; resScale = 0.85; setQuality(ORDER[ORDER.indexOf(qName) - 1]); }
     } else if (govHigh >= 6 && resScale < 1) { govHigh = 0; resScale = Math.min(1, resScale + 0.1); resize(); noteQuality(); }
+    else if (govHigh >= 15 && fps >= 55 && !promoted && !demoted && qName !== 'high') { govHigh = 0; promoted = true; warm = 0; setQuality(ORDER[ORDER.indexOf(qName) + 1]); }
   }
 
   // ---- helpers -------------------------------------------------------------------------------
@@ -151,6 +211,13 @@ async function boot() {
     const local = real + UB_UTC_OFFSET_S;
     return local - (((local % 86400) + 86400) % 86400) - UB_UTC_OFFSET_S + freeHour * 3600;
   };
+  // real district outlines (Overture divisions); the name is simply absent if the file is missing
+  let districts: District[] = [];
+  fetch(DATA + 'districts.json').then((r) => (r.ok ? r.json() : null)).then((d) => { if (d?.districts) districts = d.districts; }).catch(() => { /* optional */ });
+  function districtAt(e: number, n: number): string | null {
+    for (const d of districts) for (const ring of d.rings) if (pointInRing(ring, e, n)) return hud.prefs.lang === 'mn' ? d.name : d.name_en;
+    return null;
+  }
   const nearData: ChunkData[] = [];
   function nearestNames(): [string | null, string | null] {
     let best = 45 * 45, name: string | null = null, sub: string | null = null, bestB = 110 * 110;
@@ -204,7 +271,7 @@ async function boot() {
     }
     const px = player.e, py = pendingPlace ? world.heightAt(player.e, player.n) : player.y, pz = -player.n;
     character.update(dt, px, py, pz, player.heading, player.speed, player.grounded, player.vy);
-    follow.update(dt, px, py, pz, world.heightAt, chunks.colliders);
+    follow.update(dt, px, py, pz, world.heightAt, chunks.colliders, player.speed);
     character.root.visible = follow.current > 1.3;
 
     // live systems
@@ -243,30 +310,37 @@ async function boot() {
       hud.setWeather(weather.state, freshness(weather.state, real), weatherChoice, real);
       nearData.length = 0; chunks.forNearData(1, (d) => nearData.push(d));
       const [street, sub] = nearestNames();
-      hud.setStreet(street, sub);
+      hud.setStreet(street, sub, districtAt(player.e, player.n));
       if (dest) {
         const d = Math.hypot(dest.east - player.e, dest.north - player.n);
         const g = enuToGeo(player.e, player.n);
-        hud.setDest(`▲ ${t('lm_zaisan_hill')} ${d >= 1000 ? (d / 1000).toFixed(1) + ' km' : Math.round(d) + ' m'}\n${g.lat.toFixed(5)}, ${g.lon.toFixed(5)}`);
+        hud.setDest(t('lm_zaisan_hill'), d >= 1000 ? (d / 1000).toFixed(1) + ' km' : Math.round(d) + ' m', `${g.lat.toFixed(5)}° N  ${g.lon.toFixed(5)}° E`);
       }
     }
     if (mapTimer <= 0 && started) {
-      mapTimer = 0.12;
-      hud.drawMinimap(nearData, player.e, player.n, player.heading, follow.yaw, landmarks, dest);
+      mapTimer = 0.15;
+      // the 2D map is redrawn only when something on it changed (standing still costs nothing)
+      const key = `${Math.round(player.e)},${Math.round(player.n)},${player.heading.toFixed(2)},${follow.yaw.toFixed(2)},${nearData.length}`;
+      if (key !== mapKey) hud.drawMinimap(nearData, player.e, player.n, player.heading, follow.yaw, landmarks, dest);
+      mapKey = key;
     }
   }
+  let mapKey = '';
   let stats: Record<string, unknown> = {};
   noteQuality();
   // small hook for automated tests and performance captures (scripts/perf.mjs)
   (window as any).__ub6 = {
-    stats: () => ({ ...stats, e: player.e, n: player.n, y: player.y, speed: player.speed, grounded: player.grounded, yaw: follow.yaw, near: chunks.nearProgress(), colliders: chunks.colliders.count, pending: !!pendingPlace }),
+    stats: () => ({ ...stats, e: player.e, n: player.n, y: player.y, speed: player.speed, grounded: player.grounded, yaw: follow.yaw, near: chunks.nearProgress(), colliders: chunks.colliders.count, pending: !!pendingPlace, streaming: chunks.streaming, worstBuildMs: chunks.worstBuildMs }),
     place: (e: number, n: number) => { pendingPlace = { e, n }; player.e = e; player.n = n; },
     travel: (key: string) => { const l = landmarks[key]; if (l) { pendingPlace = { e: l.east, n: l.north }; player.e = l.east; player.n = l.north; } },
     setTime: (hour: number | null) => { timeLive = hour === null; if (hour !== null) freeHour = hour; hudTimer = 0; },
     setWeather: (w: WeatherChoice) => { weatherChoice = w; },
     setQuality: (q: QualityChoice) => applyQuality(q),
-    look: (yaw: number, pitch: number) => { follow.yaw = yaw; follow.pitch = pitch; },
+    look: (yaw: number, pitch: number) => { follow.yaw = yaw; follow.pitch = pitch; follow.snap(); },
+    zoom: (d: number) => { follow.distance = d; follow.snap(); },
+    face: (h: number) => { player.heading = h; },
     weather: () => weather.state,
+    audit: () => auditScene(scene, camera, renderer),
   };
   requestAnimationFrame(frame);
 }
