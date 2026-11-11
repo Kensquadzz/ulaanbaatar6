@@ -1,0 +1,77 @@
+{
+ "found": {
+  "zaisan_hill": {
+   "name": "Зайсан толгой",
+   "kind": "building",
+   "lat": 47.883993,
+   "lon": 106.915507,
+   "east": -155.02,
+   "north": -3878.26,
+   "ground_m": 1370.1
+  },
+  "shangri_la": {
+   "name": "Shangri-La Hotel (Block C)",
+   "kind": "building",
+   "lat": 47.912659,
+   "lon": 106.921754,
+   "east": 312.01,
+   "north": -690.93,
+   "ground_m": 1291.9
+  },
+  "state_department_store": {
+   "name": "Улсын их дэлгүүр",
+   "kind": "building",
+   "lat": 47.917006,
+   "lon": 106.90626,
+   "east": -846.14,
+   "north": -207.53,
+   "ground_m": 1299.0
+  },
+  "blue_sky_tower": {
+   "name": "Блю скай товер",
+   "kind": "building",
+   "lat": 47.916484,
+   "lon": 106.918685,
+   "east": 82.63,
+   "north": -265.65,
+   "ground_m": 1298.0
+  },
+  "government_palace": {
+   "name": "Засгийн газрын ордон",
+   "kind": "building",
+   "lat": 47.920509,
+   "lon": 106.917312,
+   "east": -20.02,
+   "north": 181.86,
+   "ground_m": 1308.3
+  },
+  "chinggis_khaan_museum": {
+   "name": "Чингис хаан Үндэсний музей",
+   "kind": "building",
+   "lat": 47.922636,
+   "lon": 106.914897,
+   "east": -200.5,
+   "north": 418.46,
+   "ground_m": 1306.0
+  },
+  "sukhbaatar_square": {
+   "name": "Сүхбаатарын талбай",
+   "kind": "land_use",
+   "lat": 47.918811,
+   "lon": 106.917629,
+   "east": 3.63,
+   "north": -6.9,
+   "ground_m": 1298.0
+  },
+  "zaisan_square": {
+   "name": "Зайсан талбай",
+   "kind": "land_use",
+   "lat": 47.886729,
+   "lon": 106.915765,
+   "east": -135.73,
+   "north": -3574.0,
+   "ground_m": 1303.8
+  }
+ },
+ "not_found_in_source": []
+}

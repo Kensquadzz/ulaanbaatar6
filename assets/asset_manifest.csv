@@ -1,0 +1,19 @@
+id,name,category,priority,stage,reference_sources,license,version,ue_path,tri_budget,texture_budget,notes
+CH-001,Player male (streetwear hoodie and sneakers),character,P1,not_started,,original,0,,18000,2x1024,LOD chain to 3000 tris
+CH-002,Player female (winter jacket),character,P1,not_started,,original,0,,18000,2x1024,
+CH-010,Pedestrian set A (4 body variants),character,P1,not_started,,original,0,,9000,1x1024,Shared skeleton with player
+VH-001,Compact hybrid hatchback (original design),vehicle,P1,not_started,,original,0,,35000,2x1024,Replaces placeholder box; rig wheels for optional Chaos variant
+VH-010,Traffic sedan and SUV set,vehicle,P2,not_started,,original,0,,15000,1x1024,
+HR-001,Mongolian horse with saddle,horse,P1,not_started,,original,0,,16000,2x1024,Walk trot gallop idle mount dismount animations
+BL-001,Government Palace,building,P1,not_started,,original,0,,25000,2x1024,Footprint from map data; facade from own or licensed photos
+BL-002,Blue Sky Tower,building,P1,not_started,,original,0,,12000,1x1024,Height 105 m from source data
+BL-003,State Department Store,building,P1,not_started,,original,0,,15000,2x1024,
+BL-004,Shangri-La complex,building,P1,not_started,,original,0,,18000,2x1024,Heights 108-135 m from source data
+BL-005,Zaisan Memorial,building,P1,not_started,,original,0,,10000,1x1024,
+BL-020,Soviet-era apartment block kit,building,P1,not_started,,original,0,,6000,1x1024,Modular facade kit applied to real footprints
+BL-021,Modern apartment tower kit,building,P1,not_started,,original,0,,6000,1x1024,
+BL-022,Ger and fenced plot kit,building,P2,not_started,,original,0,,1500,1x512,
+MT-001,Asphalt dry / wet / snow / ice,material,P1,not_started,,original,0,,,1x1024,Driven by weather parameters
+MT-002,Terrain steppe grass and snow,material,P1,not_started,,original,0,,,1x1024,
+PR-001,Street lamp and traffic light set,prop,P1,not_started,,original,0,,800,1x512,Lamps switch with the live clock
+CN-001,Opening cinematic reference shots,cinematic,P3,not_started,,original,0,,,,Higgsfield video as reference and trailer only
