@@ -67,6 +67,39 @@ const open = await page.evaluate(() => !document.getElementById('settings').clas
 await page.screenshot({ path: out + 'settings.png' });
 await page.tap('#btnClose');
 ok('settings panel opens', open, {});
+// 5b) touch response: time from the finger moving to the character moving (software renderer, so an upper bound)
+await touch('touchStart', [[130, 300, 1]]);
+const tr0 = Date.now(); await touch('touchMove', [[130, 244, 1]]);
+let respMs = -1;
+for (let i = 0; i < 40 && respMs < 0; i++) { if ((await stats()).speed > 0.3) respMs = Date.now() - tr0; else await sleep(16); }
+await touch('touchEnd', []);
+await sleep(900);
+ok('touch responds quickly and releasing the joystick stops the character', respMs >= 0 && respMs < 400 && (await stats()).speed < 0.3, { msToFirstMovement: respMs, speedAfterRelease: +(await stats()).speed.toFixed(2) });
+// 5c) vertical drag changes the camera pitch (visible as a different frame; yaw must stay put)
+const y0 = (await stats()).yaw;
+await touch('touchStart', [[600, 150, 3]]);
+for (let i = 1; i <= 6; i++) { await touch('touchMove', [[600, 150 + i * 12, 3]]); await sleep(50); }
+await touch('touchEnd', []);
+ok('vertical drag tilts without turning', Math.abs((await stats()).yaw - y0) < 0.05, { yawDrift: +((await stats()).yaw - y0).toFixed(3) });
+// 5d) safe areas: simulate an iPhone notch / home bar (47 px sides, 21 px bottom) and make sure every control stays inside
+const safe = await page.evaluate(() => {
+  const r = document.documentElement.style;
+  r.setProperty('--sal', '47px'); r.setProperty('--sar', '47px'); r.setProperty('--sab', '21px');
+  const out = {};
+  for (const id of ['btnJump', 'btnRun', 'mapwrap', 'topRight', 'stick']) { const b = document.getElementById(id).getBoundingClientRect(); out[id] = [Math.round(b.left), Math.round(b.right), Math.round(b.bottom)]; }
+  for (const k of ['--sal', '--sar', '--sab']) r.removeProperty(k);
+  return out;
+});
+ok('controls stay inside simulated iPhone safe areas', Object.values(safe).every(([l, r, b]) => l >= 47 && r <= 844 - 47 && b <= 390 - 21), safe);
+// 5e) buttons are large enough for thumbs (Apple recommends at least 44 pt)
+const sizes = await page.evaluate(() => Object.fromEntries(['btnJump', 'btnRun', 'btnSettings'].map((id) => { const b = document.getElementById(id).getBoundingClientRect(); return [id, [Math.round(b.width), Math.round(b.height)]]; })));
+ok('touch targets are at least 44 pt', Object.values(sizes).every(([w, h]) => w >= 44 && h >= 44), sizes);
+// 5f) portrait shows the rotate prompt, landscape hides it
+await page.setViewportSize({ width: 390, height: 844 }); await sleep(400);
+const portrait = await page.evaluate(() => getComputedStyle(document.getElementById('rotate')).display);
+await page.setViewportSize({ width: 844, height: 390 }); await sleep(600);
+const landscape = await page.evaluate(() => getComputedStyle(document.getElementById('rotate')).display);
+ok('portrait asks to rotate, landscape plays', portrait !== 'none' && landscape === 'none', { portrait, landscape });
 // 6) live systems
 const live = await page.evaluate(() => ({ clock: document.getElementById('clock').textContent, badge: document.getElementById('timeBadge').textContent,
   wx: document.getElementById('wxBadge').textContent + ' ' + document.getElementById('wxTemp').textContent, sun: document.getElementById('sunLine').textContent, state: window.__ub6.weather() }));
@@ -97,7 +130,8 @@ const counts = [];
 for (const lm of ['zaisan_hill', 'state_department_store', 'chinggis_khaan_museum', 'zaisan_square', 'sukhbaatar_square', 'zaisan_hill', 'sukhbaatar_square']) {
   await page.evaluate((l) => window.__ub6.travel(l), lm);
   await page.waitForFunction(() => !window.__ub6.stats().pending, null, { timeout: 180000 });
-  await sleep(3500);
+  await page.waitForFunction(() => !window.__ub6.stats().streaming, null, { timeout: 300000 });   // compare like with like: fully streamed
+  await sleep(1500);
   const s = await stats();
   counts.push({ lm, geometries: s.geometries, textures: s.textures, chunks: s.chunks });
 }

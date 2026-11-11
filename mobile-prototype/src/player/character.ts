@@ -4,7 +4,11 @@
 //
 // Honest status: this is an improved stylised stand-in wearing everyday city winter clothes
 // (quilted jacket, scarf, beanie, jeans, trainers). It is NOT a finished realistic character:
-// there is no skinned mesh, no facial detail, no cloth simulation and no motion-captured animation.
+// there is no smooth skinning, no facial detail, no cloth simulation and no motion-captured animation.
+//
+// Performance: the ~50 body parts are merged into ONE rigidly skinned mesh (13 bones, vertex
+// colours, one material), so the figure costs one draw call in the main pass and one in the
+// shadow pass instead of about fifty in each.
 // A properly licensed rigged model (glTF) should replace it; the joint layout below matches a
 // standard humanoid so that swap stays local to this file.
 import * as THREE from 'three';
@@ -34,10 +38,12 @@ const tube = (rTop: number, rBot: number, len: number, seg = 10) => new THREE.Cy
 export class Character {
   readonly root = new THREE.Group();
   private body = new THREE.Group();        // faces +z; rotated so heading 0 looks north
-  private pelvis = new THREE.Group();
-  private spine = new THREE.Group();
-  private headG = new THREE.Group();
-  private j: Record<string, THREE.Group> = {};
+  private pelvis = new THREE.Bone();
+  private spine = new THREE.Bone();
+  private headG = new THREE.Bone();
+  private j: Record<string, THREE.Object3D> = {};
+  private skin: THREE.SkinnedMesh;
+  private pbr = true;
   private blob: THREE.Mesh;
   private phase = 0;
   private wMove = 0; private wAir = 0; private land = 0; private wasGrounded = true;
@@ -46,14 +52,19 @@ export class Character {
   private pose = zero();
 
   constructor(pbr: boolean) {
-    const mat = (c: number, r = 0.8, m = 0) => (pbr ? new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m }) : new THREE.MeshLambertMaterial({ color: c }));
-    const jacket = mat(0x1d3a4a, 0.5), jacketTrim = mat(0x12242e, 0.6), scarf = mat(0xb5562b, 0.95), skin = mat(0xd3a07a, 0.65);
-    const hair = mat(0x15110f, 0.7), beanie = mat(0x2a2c31, 1), jeans = mat(0x2b3b55, 0.92), shoe = mat(0xe9e7e2, 0.6), sole = mat(0x1b1b1d, 0.9), dark = mat(0x121316, 0.5);
-    const add = (parent: THREE.Object3D, geo: THREE.BufferGeometry, m: THREE.Material, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1) => {
-      const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.scale.set(sx, sy, sz); o.castShadow = true; parent.add(o); return o;
+    const jacket = 0x1d3a4a, jacketTrim = 0x12242e, scarf = 0xb5562b, skin = 0xd3a07a;
+    const hair = 0x15110f, beanie = 0x2a2c31, jeans = 0x2b3b55, shoe = 0xe9e7e2, sole = 0x1b1b1d, dark = 0x121316;
+    const bones: THREE.Bone[] = [];
+    const parts: { geo: THREE.BufferGeometry; color: number; bone: number; local: THREE.Matrix4 }[] = [];
+    const bone = (o: THREE.Object3D) => { bones.push(o as THREE.Bone); return bones.length - 1; };
+    const boneOf = new Map<THREE.Object3D, number>();
+    const Q0 = new THREE.Quaternion();
+    const add = (parent: THREE.Object3D, geo: THREE.BufferGeometry, color: number, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1) => {
+      if (!boneOf.has(parent)) boneOf.set(parent, bone(parent));
+      parts.push({ geo, color, bone: boneOf.get(parent)!, local: new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), Q0, new THREE.Vector3(sx, sy, sz)) });
     };
     const joint = (name: string, parent: THREE.Object3D, x: number, y: number, z = 0) => {
-      const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); this.j[name] = g; return g;
+      const g = new THREE.Bone(); g.position.set(x, y, z); parent.add(g); this.j[name] = g; return g;
     };
 
     // ---- pelvis and legs (hip joints at 0.93 m) ----
@@ -115,6 +126,34 @@ export class Character {
       add(el, new THREE.SphereGeometry(0.014, 6, 5), skin, -0.012 * s, -0.31, 0.04, 1, 1.9, 1);
     }
 
+    // ---- bake every part into one skinned mesh (each vertex follows exactly one bone) ----
+    this.body.updateMatrixWorld(true);
+    const pos: number[] = [], nor: number[] = [], col: number[] = [], si: number[] = [], sw: number[] = [], idx: number[] = [];
+    const c = new THREE.Color(), m = new THREE.Matrix4();
+    for (const p of parts) {
+      const g = p.geo.index ? p.geo : p.geo.toNonIndexed();
+      g.applyMatrix4(m.multiplyMatrices(bones[p.bone].matrixWorld, p.local));
+      const off = pos.length / 3, P = g.getAttribute('position'), N = g.getAttribute('normal');
+      c.setHex(p.color);                               // converted to linear, as vertex colours expect
+      for (let i = 0; i < P.count; i++) {
+        pos.push(P.getX(i), P.getY(i), P.getZ(i)); nor.push(N.getX(i), N.getY(i), N.getZ(i));
+        col.push(c.r, c.g, c.b); si.push(p.bone, 0, 0, 0); sw.push(1, 0, 0, 0);
+      }
+      if (g.index) for (let i = 0; i < g.index.count; i++) idx.push(g.index.getX(i) + off);
+      else for (let i = 0; i < P.count; i++) idx.push(i + off);
+      g.dispose(); p.geo.dispose();
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+    geo.setIndex(idx);
+    this.skin = new THREE.SkinnedMesh(geo, this.material(pbr));
+    this.skin.castShadow = true; this.skin.frustumCulled = false; this.skin.userData.kind = 'character';
+    this.body.add(this.skin);
+    this.skin.bind(new THREE.Skeleton(bones), new THREE.Matrix4());
+    this.pbr = pbr;
+
     this.root.add(this.body);
     // soft contact shadow used when real shadows are off (low preset, night)
     this.blob = new THREE.Mesh(new THREE.CircleGeometry(0.42, 20),
@@ -124,6 +163,16 @@ export class Character {
     this.body.rotation.y = Math.PI;        // authored facing +z; heading 0 (north) is -z
   }
 
+  private material(pbr: boolean): THREE.Material {
+    return pbr ? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72, metalness: 0 }) : new THREE.MeshLambertMaterial({ vertexColors: true });
+  }
+  /** HIGH uses the physically based material, LOW and MEDIUM the cheaper Lambert one. */
+  setPbr(pbr: boolean) {
+    if (pbr === this.pbr) return;
+    (this.skin.material as THREE.Material).dispose();
+    this.skin.material = this.material(pbr); this.pbr = pbr;
+  }
+  get triangles() { return this.skin.geometry.index!.count / 3; }
   setBlob(on: boolean) { this.blob.visible = on; }
 
   /** Joint angles of the locomotion cycle. `run` 0 = walk, 1 = sprint; angles in radians, forward positive. */

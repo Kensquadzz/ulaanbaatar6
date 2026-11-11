@@ -37,7 +37,7 @@ npm run perf       # end-to-end touch test + frame statistics (needs Playwright 
 
 - Buildings: one draw call per chunk for all styles through a texture array (WebGL2), per-wall bay fitting so windows are never cut, warm lit windows at night, baked contact shadow on the ground around footprints.
 - Streets: `src/world/street.ts` builds sidewalks with curbs, crossings and lamps from the real centre lines; a wider road atlas adds lane lines, edge lines and worn asphalt.
-- Streetlights are instanced (pole, head, additive light pool) plus one halo point cloud per chunk. There are no real light sources, so the cost does not grow with lamp count; distant chunks keep only the halos.
+- Streetlights are instanced (pole, head, additive light pool) plus a halo point cloud. There are no real light sources, so the cost does not grow with lamp count; distant chunks keep only the halos.
 - Night sky: sparse faint stars, warm city glow at the horizon, fog matched to it.
 - Camera: eased rotation, three-ray wall and ground avoidance, slight shoulder offset, wider view when sprinting. Movement: faster stop and start, forgiving jump timing.
 - HUD: district name, cleaner mini-map with view cone, destination and GPS card, restyled joystick and buttons.
@@ -68,11 +68,51 @@ at all the HUD says so and the world stays neutral. FREE time and MANUAL weather
 
 - Chunks of 256 m stream around the player: near rings in full detail with collision, far rings
   simplified, the rest released (geometry and textures disposed). A 64 m backdrop shows distant hills.
-- One draw call each for terrain, roads and buildings per chunk; three.js frustum culling per mesh.
-- Presets LOW / MEDIUM / HIGH (view distance, resolution cap, shadows, PBR). AUTO starts at
-  MEDIUM and lowers resolution first, then the preset, when the frame rate drops below 27 fps.
-- Measured in headless Chromium (software WebGL, no GPU): 61 / 112 / 159 draw calls and
-  48k / 70k / 102k triangles on LOW / MEDIUM / HIGH. **No real iPhone measurement exists yet.**
+- Near chunk: three draw calls (terrain, roads with sidewalks, buildings). Far chunk: two (terrain
+  with the carriageways painted into its texture, buildings without tiny footprints).
+  three.js frustum culling per mesh.
+- All streetlights in view: four draw calls in total (instanced poles, heads, light pools, one halo point cloud).
+- Character: one rigidly skinned mesh, one draw call (plus one in the shadow pass).
+- AUTO starts at MEDIUM. Below 27 fps it lowers resolution in steps to 70 %, then drops one
+  profile. It tries the next profile up once if 55+ fps holds for 15 s. Browsers give no
+  temperature reading, so frame rate is the only signal for a phone that is heating up.
+
+| Profile | Full-detail radius | View distance | Resolution cap | Sun shadows | Materials | Ground texture near / far | Far buildings skipped below |
+|---|---|---|---|---|---|---|---|
+| LOW | 1 ring (about 380 m) | 2 rings (about 640 m) | 1.0x | off (blob under the character) | Lambert | 256 / 128 px | 90 m2 |
+| MEDIUM | 1 ring | 3 rings (about 900 m) | 1.5x | 1024, PCF | Lambert | 512 / 256 px | 60 m2 |
+| HIGH | 2 rings (about 640 m) | 5 rings (about 1.4 km) | 2.0x | 2048, soft PCF | PBR buildings and character | 512 / 256 px | 40 m2 |
+
+### V1.1 performance audit (branch `feature/iphone-performance-v1-1`)
+
+Why draw calls had grown from about 135 to 180-290 in Visual Upgrade V1:
+
+1. The new character was about 50 separate meshes, drawn again in the shadow pass: about 100 calls.
+2. Streetlights were instanced per chunk: 3 calls per near chunk plus one halo cloud per chunk, 18 to 60 calls.
+3. Every far chunk cost three calls (terrain, roads, buildings).
+4. Ground and roads used the PBR shader on MEDIUM and HIGH although both are fully matte.
+5. Each ground texture kept its source canvas in memory beside the GPU copy.
+6. The mini-map canvas was redrawn 8 times a second even when nothing moved.
+
+Draw calls per frame, main plus shadow pass, same camera positions, everything streamed in
+(headless Chromium 844x390, `window.__ub6.audit()`):
+
+| View | Before | After |
+|---|---|---|
+| HIGH, Peace Avenue, day | 243 | 100 |
+| HIGH, Sukhbaatar Square, day | 248 | 105 |
+| HIGH, Peace Avenue, night | 226 | 96 |
+| MEDIUM, Peace Avenue, day | 169 | 52 |
+| MEDIUM, Peace Avenue, night | 133 | 49 |
+| LOW, Peace Avenue, day | 91 | 31 |
+| LOW, Peace Avenue, night | 104 | 33 |
+
+Estimated GPU memory after the change (computed from buffer and texture sizes, WebGL reports
+no real figure): LOW about 25 MB, MEDIUM about 53 MB, HIGH about 117 MB (geometry + textures +
+shadow map). Loaded geometries on HIGH went from 204 to 98.
+
+All frame rates measured so far come from a software renderer in the cloud (no GPU) and say
+nothing about a phone. **No real iPhone measurement exists yet.**
 
 ## Not here yet
 

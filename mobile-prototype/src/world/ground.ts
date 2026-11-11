@@ -18,7 +18,8 @@ const LAND: Record<string, [string, number]> = {
 const WATER = '#55748a';
 const WATER_LINE_M: Record<string, number> = { river: 9, stream: 3, drain: 2, ditch: 1.5, canal: 3 };
 
-export function paintGround(c: ChunkData, size: number): THREE.CanvasTexture {
+const ROAD_FAR = '#45464b';
+export function paintGround(c: ChunkData, size: number, bakeRoads = false): THREE.CanvasTexture {
   const cv = document.createElement('canvas');
   cv.width = cv.height = size;
   const g = cv.getContext('2d')!;
@@ -49,6 +50,14 @@ export function paintGround(c: ChunkData, size: number): THREE.CanvasTexture {
     for (let y = 0; y <= size; y += step) { g.beginPath(); g.moveTo(0, y + 0.5); g.lineTo(size, y + 0.5); g.stroke(); }
     g.restore();
   }
+  if (bakeRoads) {                       // distant chunks: real carriageways drawn at their mapped width
+    g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = ROAD_FAR;
+    for (const r of c.roads) {
+      if (!r.drivable || r.pts.length < 2) continue;
+      g.lineWidth = Math.max(1.2, r.width * k);
+      g.beginPath(); r.pts.forEach((p, i) => (i ? g.lineTo(X(p[0]), Y(p[1])) : g.moveTo(X(p[0]), Y(p[1])))); g.stroke();
+    }
+  }
   // baked contact shadow: the ground darkens toward every building footprint
   g.lineJoin = 'round';
   for (const w of [7, 4, 2]) {
@@ -66,5 +75,8 @@ export function paintGround(c: ChunkData, size: number): THREE.CanvasTexture {
   }
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 2;
+  // The canvas would otherwise stay in memory next to the GPU copy for as long as the chunk lives.
+  t.onUpdate = () => { cv.width = cv.height = 0; t.onUpdate = null as unknown as () => void; };
+  t.userData.pixels = size * size;
   return t;
 }

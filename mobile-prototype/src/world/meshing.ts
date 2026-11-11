@@ -232,8 +232,9 @@ export interface BuildingMesh extends MeshData { colliders: Collider[]; roofArea
  * large buildings, and a building placed at its lowest corner ends up buried in that bulge. With
  * `hAt`, each building stands on the highest terrain under its footprint and its walls reach down to
  * the lowest. `detail` adds ground-floor shopfronts, pitched roofs and rooftop boxes (near chunks).
+ * `minAreaM2` drops tiny footprints from the distant level of detail only.
  */
-export function buildBuildings(buildings: BuildingData[], cx: number, cy: number, hAt?: HeightFn, detail = true): BuildingMesh {
+export function buildBuildings(buildings: BuildingData[], cx: number, cy: number, hAt?: HeightFn, detail = true, minAreaM2 = 0): BuildingMesh {
   const pos: number[] = [], nor: number[] = [], uvs: number[] = [], col: number[] = [], sty: number[] = [], idx: number[] = [];
   const colliders: Collider[] = [];
   const e0 = cx * CHUNK_M, n0 = cy * CHUNK_M;
@@ -274,6 +275,7 @@ export function buildBuildings(buildings: BuildingData[], cx: number, cy: number
       const f = ring[0], l = ring[ring.length - 1];
       if (ring.length > 3 && Math.hypot(f[0] - l[0], f[1] - l[1]) < 0.01) ring = ring.slice(0, -1);
       const A = Math.abs(area);
+      if (A < minAreaM2) continue;             // distant LOD: sheds and gers are a few pixels at most
       roofArea += A;
       const look = buildingLook(b, A, ring.length);
       if (look.visual) visualHeights++;
