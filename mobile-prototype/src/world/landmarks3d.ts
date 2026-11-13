@@ -15,6 +15,8 @@ import { buildGovernmentPalace } from './palace';
 import { buildStateDepartmentStore } from './deptstore';
 import { loadHorse, MONUMENT_GLOW } from './monument';
 import { PROC_GLOW } from './proc';
+import { buildZaisanMemorial, zaisanSolids, ZAISAN_SPIRE_ID } from './zaisan';
+import { makeCollider, type Collider } from './collision';
 import { buildingLook, groundRange, ringArea } from './meshing';
 import type { BuildingData } from './types';
 
@@ -34,7 +36,6 @@ export interface LandmarkModel {
 export const LANDMARK_MODELS: LandmarkModel[] = [
   { id: '04fab6dd', file: 'landmarks/hf-blue-sky-tower-study.glb', label: 'Блю скай товер (стилизац)', faces: [3.6, -6.9] },
   { id: '8a90698c', file: 'landmarks/hf-shangri-la-study.glb', label: 'Shangri-La (стилизац)', faces: [312, -560] },
-  { id: '04fdf871', file: 'landmarks/hf-zaisan-memorial-study.glb', label: 'Зайсан толгой (стилизац)', faces: [-135.7, -3574] },
 ];
 /**
  * The Higgsfield studies of the Government Palace and the State Department Store, replaced on
@@ -44,16 +45,24 @@ export const LANDMARK_MODELS: LandmarkModel[] = [
 export const HF_STUDIES_REPLACED: LandmarkModel[] = [
   { id: 'a83f3ea0', file: 'landmarks/hf-government-palace-study.glb', label: 'Засгийн газрын ордон (стилизац)', faces: [3.6, -6.9] },
   { id: '3e9c49ca', file: 'landmarks/hf-state-department-store-study.glb', label: 'Улсын их дэлгүүр (стилизац)', faces: [-845, -300] },
+  { id: '04fdf871', file: 'landmarks/hf-zaisan-memorial-study.glb', label: 'Зайсан толгой (стилизац)', faces: [-135.7, -3574] },
 ];
 
 /**
  * Landmarks modelled by hand from the owner's reference photos (see palace.ts, deptstore.ts for what is
  * real and what is estimated). Built on the real footprint rectangle, front toward `faces`.
  */
-export interface ProceduralLandmark { id: string; label: string; faces: [number, number]; build: (w: number, d: number, horse: THREE.BufferGeometry | null) => THREE.Group }
+export interface ProceduralLandmark {
+  id: string; label: string; faces: [number, number];
+  build: (w: number, d: number, horse: THREE.BufferGeometry | null) => THREE.Group;
+  /** walls in local (x, z) with their top height; replaces the solid footprint collider when given */
+  solids?: (w: number, d: number) => { ring: [number, number][]; top: number }[];
+}
 export const PROCEDURAL_LANDMARKS: ProceduralLandmark[] = [
   { id: 'a83f3ea0', label: 'Засгийн газрын ордон (зургаас загварчилсан)', faces: [3.6, -6.9], build: buildGovernmentPalace },
   { id: '3e9c49ca', label: 'Улсын их дэлгүүр (зургаас загварчилсан)', faces: [-845, -300], build: (w, d) => buildStateDepartmentStore(w, d) },
+  // front to the north, where the OSM stair arrives
+  { id: '04fdf871', label: 'Зайсан толгойн дурсгал (зургаас загварчилсан)', faces: [-156, -3700], build: (w, d) => buildZaisanMemorial(w, d), solids: zaisanSolids },
 ];
 
 /**
@@ -66,6 +75,16 @@ export const SQUARE_MONUMENT = { file: 'landmarks/hf-sukhbaatar-monument-study.g
 
 const byPrefix = (id: string) => LANDMARK_MODELS.find((m) => id.startsWith(m.id));
 const procByPrefix = (id: string) => PROCEDURAL_LANDMARKS.find((m) => id.startsWith(m.id));
+
+/** Local frame of a hand-modelled landmark: origin at the centre of the front side, +Z out of the front. */
+function procFrame(ring: [number, number][], faces: [number, number]) {
+  const rect = footprintRect(ring), c = frontSide(rect, faces);
+  const fe = rect.ce + c.fe * c.depth, fn = rect.cn + c.fn * c.depth;
+  const yaw = Math.atan2(c.fe, -c.fn), cs = Math.cos(yaw), sn = Math.sin(yaw);
+  // local (x, z) -> world (east, north); three.js rotation about Y by yaw, then z = -north
+  const toWorld = (x: number, z: number): [number, number] => [fe + x * cs + z * sn, fn - (-x * sn + z * cs)];
+  return { w: c.width * 2, d: c.depth * 2, fe, fn, yaw, toWorld };
+}
 
 /** Minimum-area enclosing rectangle of a ring: centre, unit axis u, half extents along u and v. */
 export function footprintRect(ring: [number, number][]) {
@@ -167,8 +186,20 @@ export class LandmarkModels {
     }
   }
 
+  /** Custom colliders for a hand-modelled landmark with open spaces (Zaisan ring), else null. */
+  solidsFor(b: BuildingData, hAt: HeightFn): Collider[] | null {
+    const pl = procByPrefix(b.id);
+    if (!pl?.solids || !this.ready.has(pl.id)) return null;
+    const ring = b.rings[0]; if (!ring || ring.length < 3) return null;
+    const f = procFrame(ring, pl.faces), y = hAt(f.fe, f.fn);
+    return pl.solids(f.w, f.d).map((s) => makeCollider(s.ring.map(([x, z]) => f.toWorld(x, z)), y - 1, y + s.top));
+  }
+
   /** True when this building should be drawn by `place` instead of the extruder. */
-  replaces(b: BuildingData) { const m = byPrefix(b.id) ?? procByPrefix(b.id); return !!m && this.ready.has(m.id); }
+  replaces(b: BuildingData) {
+    if (b.id.startsWith(ZAISAN_SPIRE_ID)) return this.ready.has('04fdf871');   // drawn inside the Zaisan model
+    const m = byPrefix(b.id) ?? procByPrefix(b.id); return !!m && this.ready.has(m.id);
+  }
 
   /** Adds the models for this chunk's replaced buildings (and the square monument) to `group`. */
   place(buildings: BuildingData[], cx: number, cy: number, group: THREE.Group, hAt: HeightFn) {
@@ -188,14 +219,13 @@ export class LandmarkModels {
       const pl = procByPrefix(b.id);
       if (pl && this.ready.has(pl.id)) {
         const ring = b.rings[0]; if (!ring || ring.length < 3) continue;
-        const rect = footprintRect(ring), c = frontSide(rect, pl.faces);
+        const f = procFrame(ring, pl.faces);
         let model = this.built.get(b.id);
-        if (!model) { model = pl.build(c.width * 2, c.depth * 2, this.horse); shared(model); this.built.set(b.id, model); }
-        const fe = rect.ce + c.fe * c.depth, fn = rect.cn + c.fn * c.depth;   // centre of the front side
+        if (!model) { model = pl.build(f.w, f.d, this.horse); shared(model); this.built.set(b.id, model); }
         const m = model.clone(true);
         m.name = pl.label; m.userData.kind = 'hand-modelled landmark (from photos)';
-        m.position.set(fe - e0, hAt(fe, fn) - 0.02, -fn + n0);
-        m.rotation.y = Math.atan2(c.fe, -c.fn);
+        m.position.set(f.fe - e0, hAt(f.fe, f.fn) - 0.02, -f.fn + n0);
+        m.rotation.y = f.yaw;
         m.updateMatrix(); m.updateMatrixWorld(true);
         group.add(m);
         continue;

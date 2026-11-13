@@ -148,3 +148,10 @@ Done (original rules, UI and code; no assets or names from other games):
 - `src/world/palace.ts`, `src/world/deptstore.ts`: hand-modelled from Kenzz's reference photos and placed on the real footprint rectangle (`PROCEDURAL_LANDMARKS` in landmarks3d.ts). The Higgsfield studies of these two are kept as `HF_STUDIES_REPLACED`. Heights, column counts, depths, rear sides and the store sign are ESTIMATES.
 - `src/world/monument.ts`: rearing horse facing EAST (from the photos), rough rock on a red granite base, relief on the south face, 12 stone lions with chains, flower beds. Sizes are estimates. The lion ring is the collider.
 - `src/world/proc.ts`: helpers (one mesh per material via `bakeByMaterial`, canvas textures, night glow list).
+
+## Zaisan V1 (2026-11-13): Zaisan hill, memorial and Buddha
+
+- Terrain (`smooth_terrain.py`, re-run): the filter fades out on real hillsides (broad slope > 7-12 %), so Zaisan keeps its raw DEM shape. Level pads at monument sites: the Zaisan summit at 1365.9 m and Buddha Park at 1303.7 m (median raw ground; the DEM summit included the memorial itself).
+- `src/world/zaisan.ts`: the memorial was modelled from Kenzz's photos on the OSM circle footprint, with the entrance to the north where the OSM stairs arrive. The spire and soldier sit on the OSM footprint "Red Army Soldier Statue" (27 m in the source), which is drawn inside this model and keeps its own collider. You can walk inside the ring. The mural is an abstract colour band, not the real painting.
+- `src/world/buddha.ts`: the golden standing Buddha sits at the centre of the OSM footway ring in Buddha Park (the Overture POI is 18 m west) and faces north. All sizes are estimates (total height about 24 m).
+- The Higgsfield Zaisan study moved to `HF_STUDIES_REPLACED`.

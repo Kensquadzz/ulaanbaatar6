@@ -11,6 +11,10 @@ WHAT IT DOES (documented, reproducible, nothing invented):
   2. Every mapped pedestrian square / plaza (Overture land_use subtype "pedestrian", > 1500 m2) is
      replaced by the least-squares PLANE through its own samples: it stays at its real height and
      keeps its real overall slope, just without the bumps. Edges blend over one cell.
+  3. Real hillsides (Zaisan, Bogd Khan foothills) keep their raw DEM: where the 64 m-scale slope is
+     over ~10 %, the filter fades out, so the filter no longer shaves hilltops (owner, 2026-11-13).
+  4. Monument sites get a level pad at the median raw ground height around them (the DEM summit at
+     Zaisan carries the memorial structure itself, ~7 m): SITES below, pad radius then blend.
 The unfiltered grid is kept per chunk as `height_grid_raw_dm`, and the manifest records the filter.
 
 Usage: python -m ub6pipeline.smooth_terrain <repo root>
@@ -28,6 +32,12 @@ CELL = 16.0
 CHUNK = 256.0
 SIGMA_M = 24.0
 MAX_CHANGE_M = 4.0
+# (name, centre east, centre north, pad radius m, blend radius m, ring for the ground sample m)
+# centres: Zaisan = OSM footway ring round the memorial; Buddha = OSM footway ring round the statue
+SITES = [
+    ("Zaisan memorial", -156.0, -3879.0, 16.0, 34.0, (18.0, 30.0)),
+    ("Buddha statue park", -409.5, -3587.0, 16.0, 30.0, (0.0, 30.0)),
+]
 
 
 def point_in_ring(ring, e, n):
@@ -74,6 +84,11 @@ def main(root):
         return np.apply_along_axis(lambda v: np.convolve(np.pad(v, r, mode="edge"), k, mode="valid"), 0, a)
     sm = blur(filled * mask) / np.maximum(blur(mask.astype(float)), 1e-6)
     out = raw + np.clip(sm - raw, -MAX_CHANGE_M, MAX_CHANGE_M)
+    # 3) keep real hillsides: fade the filter out where the broad slope is steep
+    big = blur(blur(filled * mask)) / np.maximum(blur(blur(mask.astype(float))), 1e-6)
+    gy_, gx_ = np.gradient(big, CELL)
+    w = np.clip((np.hypot(gx_, gy_) - 0.07) / 0.05, 0.0, 1.0)
+    out = np.where(mask, out * (1 - w) + raw * w, out)
 
     # 2) plazas -> fitted planes (pieces of one plaza in several chunks share one plane)
     plazas = {}
@@ -109,6 +124,28 @@ def main(root):
             out[j, i] = 0.5 * out[j, i] + 0.5 * (coef[0] * e + coef[1] * n + coef[2])
         done.append((p["name"], round(area), len(inside), round(float(np.std(b)), 2)))
 
+    # 4) level pads for monument sites
+    pads = []
+    for name, ce, cn, pad, blend, (r0, r1) in SITES:
+        cells = []
+        for j in range(H):
+            for i in range(W):
+                if not mask[j, i]:
+                    continue
+                e = x0 * CHUNK + i * CELL; n = y0 * CHUNK + j * CELL
+                dist = math.hypot(e - ce, n - cn)
+                if dist <= blend:
+                    cells.append((j, i, dist))
+        ring = [raw[j, i] for (j, i, dd) in cells if r0 <= dd <= r1]
+        if not ring:
+            continue
+        h = float(np.median(ring))
+        for (j, i, dd) in cells:
+            t = 0.0 if dd <= pad else min(1.0, (dd - pad) / (blend - pad))
+            t = t * t * (3 - 2 * t)
+            out[j, i] = h * (1 - t) + out[j, i] * t
+        pads.append((name, round(h, 1)))
+
     for (cx, cy), (f, d) in chunks.items():
         gy, gx = (cy - y0) * (N - 1), (cx - x0) * (N - 1)
         if "height_grid_raw_dm" not in d:
@@ -117,10 +154,12 @@ def main(root):
         json.dump(d, open(f, "w"), ensure_ascii=False, separators=(",", ":"))
     mf = os.path.join(root, "data/tiles/manifest.json")
     m = json.load(open(mf))
-    m["terrain_filter"] = {"method": "gaussian sigma 24 m, change capped at 4 m; pedestrian plazas > 1500 m2 set to their least-squares plane",
+    m["terrain_filter"] = {"method": "gaussian sigma 24 m, change capped at 4 m, faded out on hillsides (broad slope > 7-12 %); pedestrian plazas > 1500 m2 set to their least-squares plane; level pads at monument sites (median raw ground around them)",
+                           "pads": pads,
                            "script": "pipeline/ub6pipeline/smooth_terrain.py", "raw_kept_as": "height_grid_raw_dm"}
     json.dump(m, open(mf, "w"), ensure_ascii=False, separators=(",", ":"))
     diff = np.abs(out - raw)[mask]
+    print("pads", pads)
     print(f"changed: mean {diff.mean():.2f} m, max {diff.max():.2f} m; plazas flattened: {len(done)}")
     for x in sorted(done, key=lambda t: -t[1])[:8]:
         print("  ", x)

@@ -15,6 +15,7 @@ import { LandmarkModels, SQUARE_MONUMENT, SQUARE_MONUMENT_ENABLED } from './land
 import type { ChunkData, Manifest, Overview } from './types';
 import { Bridges, type Bridge } from './bridges';
 import { buildSukhbaatarMonument, MONUMENT_HALF, PEDESTAL_H } from './monument';
+import { buildBuddha, BUDDHA, BUDDHA_HALF } from './buddha';
 import { makeCollider } from './collision';
 
 interface Entry {
@@ -151,6 +152,8 @@ export class ChunkManager {
   }
   /** Sukhbaatar statue (stylised), placed at the centre of the square once built */
   private monument: THREE.Group | null = null;
+  /** golden Buddha in Buddha Park, built on first use */
+  private buddha: THREE.Group | null = null;
   /** Height to stand or drive on (bridge deck or terrain), given the previous height. */
   surfaceAt(e: number, n: number, prevY: number) { return this.bridges.surface(e, n, prevY, this.height.heightAt(e, n)); }
   /** True while chunks are still being fetched or built for the current position. */
@@ -322,7 +325,11 @@ export class ChunkManager {
     const b = buildBuildings(drawn, e.cx, e.cy, hAt, near, near ? 0 : this.q.farMinAreaM2);
     add(b, this.mats.building, false, near, near, 'buildings');
     // replaced landmarks keep the collision of their real footprint
-    if (near) this.colliders.set(e.key, (replaced.length ? b.colliders.concat(buildBuildings(replaced, e.cx, e.cy, hAt, false).colliders) : b.colliders).concat(br.colliders));
+    if (near) {
+      const custom = replaced.map((x) => this.landmarks.solidsFor(x, hAt));
+      const plain = replaced.filter((_, i) => !custom[i]);
+      this.colliders.set(e.key, b.colliders.concat(plain.length ? buildBuildings(plain, e.cx, e.cy, hAt, false).colliders : [], ...custom.filter((c): c is NonNullable<typeof c> => !!c), br.colliders));
+    }
     this.landmarks.place(replaced, e.cx, e.cy, group, hAt);
     const [me, mn] = SQUARE_MONUMENT.at;
     if (this.monument && Math.floor(me / CHUNK_M) === e.cx && Math.floor(mn / CHUNK_M) === e.cy) {
@@ -336,6 +343,20 @@ export class ChunkManager {
         const hx = MONUMENT_HALF.z + 0.6, hz = MONUMENT_HALF.x + 0.6;
         this.colliders.set(e.key, [...this.colliders.get(e.key)!,
           makeCollider([[me - hx, mn - hz], [me + hx, mn - hz], [me + hx, mn + hz], [me - hx, mn + hz]], y - 1, y + PEDESTAL_H + 6)]);
+      }
+    }
+    const [be, bn] = BUDDHA.at;
+    if (Math.floor(be / CHUNK_M) === e.cx && Math.floor(bn / CHUNK_M) === e.cy) {
+      // golden Buddha, Buddha Park (hand-modelled from a photo; faces north, see buddha.ts)
+      this.buddha ??= (() => { const g = buildBuddha(); g.traverse((o) => { o.userData.shared = true; }); return g; })();
+      const y = hAt(be, bn) - 0.05;
+      this.buddha.position.set(be - e0, y, -(bn - n0));
+      this.buddha.rotation.y = Math.atan2(BUDDHA.faces[0] - be, -(BUDDHA.faces[1] - bn));
+      group.add(this.buddha);
+      if (near) {
+        const hx = BUDDHA_HALF.x, hz = BUDDHA_HALF.z;   // faces north: x across = east, z depth = north
+        this.colliders.set(e.key, [...this.colliders.get(e.key)!,
+          makeCollider([[be - hx, bn - hz], [be + hx, bn - hz], [be + hx, bn + hz], [be - hx, bn + hz]], y - 1, y + 40)]);
       }
     }
     group.updateMatrixWorld(true);

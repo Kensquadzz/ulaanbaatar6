@@ -61,7 +61,7 @@ function rock(w: number, h: number, d: number) {
 }
 
 /** Sitting stone lion on a post (simple forms), facing +Z, base at the origin. */
-function lion(root: THREE.Object3D, x: number, z: number, ry: number) {
+export function lion(root: THREE.Object3D, x: number, z: number, ry: number) {
   const L = new THREE.Group(); L.position.set(x, 0, z); L.rotation.y = ry; root.add(L);
   const add = (g: THREE.BufferGeometry, px: number, py: number, pz: number, sx = 1, sy = 1, sz = 1, mat: THREE.Material = LION) => {
     const m = new THREE.Mesh(g, mat); m.position.set(px, py, pz); m.scale.set(sx, sy, sz); L.add(m);
