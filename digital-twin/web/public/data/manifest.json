@@ -1,0 +1,43 @@
+{
+ "name": "ULAANBAATAR 3D data",
+ "bbox_wgs84": [
+  106.3626,
+  47.302,
+  108.5008,
+  48.2719
+ ],
+ "crs": "EPSG:4326 (WGS84 lon/lat)",
+ "stats": {
+  "districts": 9,
+  "main_roads_and_rail": 6592,
+  "detail_roads": 77816,
+  "road_cells": 1151,
+  "water": 5942,
+  "vegetation_areas": 6454,
+  "mapped_trees": 9631,
+  "transit_stops": 838,
+  "search_places": 15629
+ },
+ "sources": [
+  {
+   "layer": "boundary, districts, roads, rail, water, vegetation, trees, transit, places, buildings",
+   "source": "Overture Maps Foundation",
+   "release": "2026-10-21.0",
+   "includes": "OpenStreetMap contributors; Microsoft ML Building Footprints; Google/Microsoft combined buildings (doi:10.5281/zenodo.8174931); Overture places (Meta, Microsoft)",
+   "licence": "ODbL 1.0 (OSM-derived), CDLA-Permissive-2.0, CC BY 4.0 depending on theme",
+   "accuracy": "Volunteer and machine-learned mapping, not survey-verified. OSM in central Ulaanbaatar is usually within a few metres; ML footprints can be offset or merged."
+  },
+  {
+   "layer": "terrain",
+   "source": "AWS Terrain Tiles (Tilezen), terrarium encoding, zoom 14",
+   "includes": "SRTM 30 m, GMTED2010",
+   "licence": "Public domain / open (see Tilezen attribution)",
+   "accuracy": "About 30 m ground resolution, vertical error several metres; a surface model in parts (roofs and trees can be included)."
+  }
+ ],
+ "unknown": [
+  "Building heights: missing for most buildings in every open source (see buildings tileset extras).",
+  "Cadastral parcels (NSDI Mongolia / ALAGaC): not reachable from the build machine, import pipeline only.",
+  "Orthophotos at sub-metre resolution: not openly licensed for redistribution; viewer streams imagery providers live instead of copying them."
+ ]
+}

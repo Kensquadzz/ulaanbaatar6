@@ -1,0 +1,7 @@
+pyarrow>=15
+shapely>=2.0
+numpy
+pillow
+mapbox_earcut>=1.0
+meshoptimizer==0.2.30a0
+pytest

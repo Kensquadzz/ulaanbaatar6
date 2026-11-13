@@ -1,0 +1,28 @@
+{
+  "name": "ulaanbaatar-3d",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ULAANBAATAR 3D: real-world 3D digital twin of Ulaanbaatar (Next.js + CesiumJS, real open data only)",
+  "scripts": {
+    "postinstall": "node scripts/copy-cesium.mjs",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "npx serve out",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types tests/*.test.ts"
+  },
+  "dependencies": {
+    "cesium": "1.146.0",
+    "next": "16.4.3",
+    "react": "19.2.9",
+    "react-dom": "19.2.9"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.1.14",
+    "@types/node": "22.18.8",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.1",
+    "tailwindcss": "4.1.14",
+    "typescript": "5.9.3"
+  }
+}
