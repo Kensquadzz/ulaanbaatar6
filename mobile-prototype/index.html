@@ -7,12 +7,12 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="UB6" />
-  <meta name="theme-color" content="#0b1020" />
+  <meta name="theme-color" content="#0b1020" />\n  <meta name="description" content="Explore a living, playable Ulaanbaatar in ULAANBAATAR 6." />
   <meta name="robots" content="noindex, nofollow" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" href="./icon.svg" />
   <link rel="apple-touch-icon" href="./icon.svg" />
-  <title>ULAANBAATAR 6 · Mobile Prototype</title>
+  <title>ULAANBAATAR 6</title>
 </head>
 <body>
   <canvas id="game"></canvas>
@@ -37,6 +37,12 @@
     <div id="fps" class="hidden"></div>
     <div id="stick"><div id="knob"></div></div>
     <button id="btnRun" class="action" data-i18n="run"></button>
+    <button id="btnBrake" class="action hidden" aria-label="Brake">ТОРМОЗ</button>
+    <button id="btnCar" class="action car-button hidden" aria-label="Enter or exit vehicle">МАШИН</button>
+    <div id="vehicleHud" class="card hidden">
+      <div class="vehicle-label">UB6 · SEDAN <span id="gear">D</span></div>
+      <div class="speed-row"><strong id="vehicleSpeed">0</strong><small>KM/H</small></div>
+    </div>
     <button id="btnJump" class="action big" data-i18n="jump"></button>
     <div id="toast" class="hidden"></div>
   </div>

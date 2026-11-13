@@ -89,3 +89,19 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; touc
 @keyframes rot { 0%, 20% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
 @media (orientation: portrait) and (pointer: coarse) { #rotate { display: grid; } }
 @media (max-height: 360px) { #minimap { width: 96px; height: 96px; } .logo { letter-spacing: 2px; } .loadbox .small { font-size: 11px; } }
+
+/* Compact, thumb-reachable vehicle controls and instrument cluster. */
+#btnCar { right: calc(max(16px, var(--sar)) + 6px); bottom: calc(max(14px, var(--sab)) + 108px); width: 72px; height: 72px; font-size: 10px; }
+#btnCar.ready { border-color: var(--accent); background: rgba(242,162,58,0.30); box-shadow: 0 0 0 3px rgba(242,162,58,0.16), 0 3px 12px rgba(0,0,0,0.3); }
+#btnBrake { right: calc(max(16px, var(--sar)) + 176px); bottom: calc(max(14px, var(--sab)) + 6px); width: 64px; height: 64px; font-size: 10px; }
+#vehicleHud { right: calc(max(14px, var(--sar)) + 8px); bottom: calc(max(14px, var(--sab)) + 194px); min-width: 116px; padding: 8px 12px; pointer-events: none; }
+.vehicle-label { font-size: 9px; font-weight: 800; letter-spacing: 1px; opacity: .78; }
+#gear { float: right; color: var(--accent); }
+.speed-row { display: flex; align-items: baseline; gap: 5px; }
+.speed-row strong { font-size: 30px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.speed-row small { font-size: 9px; letter-spacing: 1px; opacity: .7; }
+@media (max-height: 400px) {
+  #btnCar { width: 62px; height: 62px; bottom: calc(max(10px, var(--sab)) + 94px); }
+  #btnBrake { width: 56px; height: 56px; right: calc(max(14px, var(--sar)) + 154px); }
+  #vehicleHud { bottom: calc(max(10px, var(--sab)) + 154px); }
+}

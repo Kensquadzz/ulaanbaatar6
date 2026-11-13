@@ -9,7 +9,11 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const src = path.resolve(here, '../../data/tiles');
 const dst = path.resolve(here, '../public/data');
 if (!fs.existsSync(path.join(src, 'manifest.json'))) {
-  console.error('sync-data: ' + src + ' not found. Run from a full checkout of the repository.');
+  if (fs.existsSync(path.join(dst, 'manifest.json')) && fs.existsSync(path.join(dst, 'overview.json'))) {
+    console.log('sync-data: source tiles not mounted; using bundled public/data release copy');
+    process.exit(0);
+  }
+  console.error('sync-data: ' + src + ' not found and no bundled public/data release copy exists.');
   process.exit(1);
 }
 fs.rmSync(dst, { recursive: true, force: true });

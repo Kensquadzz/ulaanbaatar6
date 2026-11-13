@@ -9,6 +9,10 @@ import { NEUTRAL_SCENE, WeatherClient, freshness, sceneFromWeather, type SceneWe
 import { FollowCamera } from './player/camera';
 import { Character } from './player/character';
 import { Player, type World } from './player/player';
+import { Vehicle } from './player/vehicle';
+import { CrowdManager } from './world/npcs';
+import { TrafficManager } from './world/traffic';
+import { AudioSystem } from './audio/audio';
 import { Hud, type QualityChoice, type WeatherChoice } from './ui/hud';
 import { t } from './ui/i18n';
 import { Input } from './ui/input';
@@ -105,15 +109,18 @@ async function boot() {
   let timeLive = true, freeHour = 12, weatherChoice: WeatherChoice = 'live';
   let pendingPlace: { e: number; n: number } | null = { e: SPAWN.east, n: SPAWN.north };
   const dest: Landmark | null = landmarks.zaisan_hill ?? null;
+  const audio = new AudioSystem();
+  let inVehicle = false;
+  let vehicleControl: (forceExit?: boolean) => void = () => {};
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(62, 1, 0.3, 14000);
   const hud = new Hud({
-    onPlay: () => { started = true; input.enabled = true; hud.start(); last = performance.now(); },
+    onPlay: () => { started = true; input.enabled = true; void audio.start(); hud.start(); last = performance.now(); },
     onQuality: (q) => applyQuality(q),
     onTimeMode: (live, hour) => { timeLive = live; freeHour = hour; hudTimer = 0; },
     onWeather: (w) => { weatherChoice = w; hudTimer = 0; },
-    onTravel: (key) => { const l = landmarks[key]; if (l) { pendingPlace = { e: l.east, n: l.north }; player.e = l.east; player.n = l.north; input.stopRun(); } },
+    onTravel: (key) => { const l = landmarks[key]; if (l) { if (inVehicle) vehicleControl(true); pendingPlace = { e: l.east, n: l.north }; player.e = l.east; player.n = l.north; input.stopRun(); } },
     onPause: (open) => { paused = open; input.enabled = started && !open; },
   }, landmarks, manifest.attribution);
   choice = hud.prefs.quality;
@@ -128,11 +135,18 @@ async function boot() {
   const character = new Character(QUALITY[qName].pbr);
   character.root.userData.kind = 'character';
   scene.add(character.root);
+  const vehicle = new Vehicle();
+  void vehicle.loadModel(import.meta.env.BASE_URL + 'models/vehicles/sedan.glb');
+  scene.add(vehicle.root);
+  const crowd = new CrowdManager();
+  scene.add(crowd.root);
+  const traffic = new TrafficManager(import.meta.env.BASE_URL + 'models/vehicles/');
+  scene.add(traffic.root);
   const player = new Player();
   player.e = SPAWN.east; player.n = SPAWN.north; player.heading = Math.PI;
   const follow = new FollowCamera(camera);
   follow.yaw = Math.PI;                         // start looking south, toward Peace Avenue and Zaisan
-  const input = new Input($('touch'), $('stick'), $('knob'), $('btnJump'), $('btnRun'));
+  const input = new Input($('touch'), $('stick'), $('knob'), $('btnJump'), $('btnRun'), $('btnBrake'));
   const weather = new WeatherClient();
 
   const xs = manifest.chunks.map((c) => c.x), ys = manifest.chunks.map((c) => c.y);
@@ -141,6 +155,47 @@ async function boot() {
     colliders: chunks.colliders,
     bounds: { minE: Math.min(...xs) * CHUNK_M + 4, maxE: (Math.max(...xs) + 1) * CHUNK_M - 4, minN: Math.min(...ys) * CHUNK_M + 4, maxN: (Math.max(...ys) + 1) * CHUNK_M - 4 },
   };
+
+  // First drivable city sedan is parked beside the Sukhbaatar Square spawn.
+  vehicle.place(SPAWN.east + 5.5, SPAWN.north - 4.5, world.heightAt(SPAWN.east + 5.5, SPAWN.north - 4.5));
+  const carButton = $('btnCar') as HTMLButtonElement;
+  const syncVehicleHud = () => {
+    const nearCar = Math.hypot(vehicle.east - player.e, vehicle.north - player.n) < 7.5;
+    carButton.textContent = inVehicle ? 'БУУХ' : 'МАШИН';
+    carButton.classList.toggle('ready', !inVehicle && nearCar);
+    carButton.classList.toggle('hidden', !inVehicle && !nearCar);
+    $('btnJump').classList.toggle('hidden', inVehicle);
+    $('btnBrake').classList.toggle('hidden', !inVehicle);
+    $('vehicleHud').classList.toggle('hidden', !inVehicle);
+    $('btnRun').textContent = inVehicle ? 'BOOST' : t('run').toUpperCase();
+  };
+  vehicleControl = (forceExit = false) => {
+    if (!inVehicle) {
+      const distance = Math.hypot(vehicle.east - player.e, vehicle.north - player.n);
+      if (distance > 7.5) return;
+      inVehicle = true; audio.vehicleEvent(true);
+      player.e = vehicle.east; player.n = vehicle.north; player.y = vehicle.y;
+      player.heading = vehicle.heading; player.ve = player.vn = player.vy = 0; player.speed = 0;
+      input.stopRun(); follow.distance = 7.4; follow.snap();
+      hud.toast('ЖОЛООДЛОГО · joystick · BOOST · ТОРМОЗ');
+    } else {
+      if (!forceExit && Math.abs(vehicle.speed) > 0.65) {
+        hud.toast('Машиныг зогсоогоод бууна уу.'); return;
+      }
+      inVehicle = false; audio.vehicleEvent(false);
+      const h = vehicle.heading;
+      player.place(vehicle.east - Math.cos(h) * 2.0, vehicle.north + Math.sin(h) * 2.0, world);
+      player.heading = h; player.speed = 0;
+      follow.distance = 4.9; follow.snap(); input.stopRun();
+      hud.toast(forceExit ? 'Очих газрыг сонголоо.' : 'Машинаас буулаа.');
+    }
+    syncVehicleHud();
+  };
+  carButton.addEventListener('click', () => vehicleControl());
+  window.addEventListener('keydown', (ev) => {
+    if (ev.code === 'KeyE' && !ev.repeat && started && !paused) vehicleControl();
+  });
+  syncVehicleHud();
 
   function applyPixelRatio() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, QUALITY[qName].pixelRatio) * resScale);
@@ -242,7 +297,8 @@ async function boot() {
   }
 
   // ---- main loop -----------------------------------------------------------------------------
-  let last = performance.now(), hudTimer = 0, mapTimer = 0, clockS = 0, sunT: SunTimes | null = null, sunDay = -1;
+  let last = performance.now(), hudTimer = 0, mapTimer = 0, crowdTimer = 0, clockS = 0, sunT: SunTimes | null = null, sunDay = -1;
+  let lastInput = { x: 0, y: 0, run: false, jump: false, brake: false, lookDX: 0, lookDY: 0 };
   const focus = new THREE.Vector3();
   let sceneW: SceneWeather = { ...NEUTRAL_SCENE };
 
@@ -265,14 +321,31 @@ async function boot() {
     else if (pendingPlace) hud.toast(t('areaLoading'));
 
     const inp = input.frame();
+    lastInput = inp;
     if (started && !paused) {
       follow.look(inp.lookDX, inp.lookDY, hud.prefs.sens);
-      if (!pendingPlace && terrainReady) player.update(dt, inp, follow.yaw, world);
+      if (!pendingPlace && terrainReady) {
+        if (inVehicle) {
+          vehicle.update(dt, inp, world, sceneW.snowCover, sceneW.rain);
+          player.e = vehicle.east; player.n = vehicle.north; player.y = vehicle.y;
+          player.heading = vehicle.heading; player.speed = Math.abs(vehicle.speed);
+        } else player.update(dt, inp, follow.yaw, world);
+      }
     }
-    const px = player.e, py = pendingPlace ? world.heightAt(player.e, player.n) : player.y, pz = -player.n;
-    character.update(dt, px, py, pz, player.heading, player.speed, player.grounded, player.vy);
-    follow.update(dt, px, py, pz, world.heightAt, chunks.colliders, player.speed);
-    character.root.visible = follow.current > 1.3;
+    const px = player.e, py = pendingPlace ? world.heightAt(player.e, player.n) : (inVehicle ? vehicle.y : player.y), pz = -player.n;
+    crowdTimer -= dt;
+    if (started && !pendingPlace && crowdTimer <= 0) {
+      const crowdData: ChunkData[] = [];
+      chunks.forNearData(2, (d) => crowdData.push(d));
+      crowd.rebuild(crowdData, player.e, player.n);
+      traffic.rebuild(crowdData, player.e, player.n, world.heightAt);
+      crowdTimer = 6;
+    }
+    if (started) { crowd.update(dt, world.heightAt); traffic.update(dt, world, sceneW.snowCover, sceneW.rain); }
+    audio.update(dt, inVehicle ? Math.abs(vehicle.speed) : player.speed, inVehicle, sceneW.rain, sceneW.snow);
+    if (!inVehicle) character.update(dt, px, py, pz, player.heading, player.speed, player.grounded, player.vy);
+    follow.update(dt, px, inVehicle ? py - 0.25 : py, pz, world.heightAt, chunks.colliders, player.speed);
+    character.root.visible = !inVehicle && follow.current > 1.3;
 
     // live systems
     const unix = nowUnix();
@@ -311,6 +384,8 @@ async function boot() {
       nearData.length = 0; chunks.forNearData(1, (d) => nearData.push(d));
       const [street, sub] = nearestNames();
       hud.setStreet(street, sub, districtAt(player.e, player.n));
+      syncVehicleHud();
+      $('vehicleSpeed').textContent = String(Math.round(Math.abs(vehicle.speed) * 3.6));
       if (dest) {
         const d = Math.hypot(dest.east - player.e, dest.north - player.n);
         const g = enuToGeo(player.e, player.n);
@@ -330,7 +405,7 @@ async function boot() {
   noteQuality();
   // small hook for automated tests and performance captures (scripts/perf.mjs)
   (window as any).__ub6 = {
-    stats: () => ({ ...stats, e: player.e, n: player.n, y: player.y, speed: player.speed, grounded: player.grounded, yaw: follow.yaw, near: chunks.nearProgress(), colliders: chunks.colliders.count, pending: !!pendingPlace, streaming: chunks.streaming, worstBuildMs: chunks.worstBuildMs }),
+    stats: () => ({ ...stats, e: player.e, n: player.n, y: player.y, speed: player.speed, grounded: player.grounded, yaw: follow.yaw, near: chunks.nearProgress(), colliders: chunks.colliders.count, pending: !!pendingPlace, streaming: chunks.streaming, worstBuildMs: chunks.worstBuildMs, inVehicle, vehicleSpeed: vehicle.speed, vehicleEast: vehicle.east, vehicleNorth: vehicle.north, input: lastInput, pedestrians: crowd.count, traffic: traffic.count, trafficModelsReady: traffic.modelsReady, trafficModelStates: traffic.modelStates, vehicleAsset: vehicle.root.userData.assetStatus }),
     place: (e: number, n: number) => { pendingPlace = { e, n }; player.e = e; player.n = n; },
     travel: (key: string) => { const l = landmarks[key]; if (l) { pendingPlace = { e: l.east, n: l.north }; player.e = l.east; player.n = l.north; } },
     setTime: (hour: number | null) => { timeLive = hour === null; if (hour !== null) freeHour = hour; hudTimer = 0; },

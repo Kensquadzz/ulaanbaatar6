@@ -48,6 +48,12 @@ and not deployed. The real/procedural split is in `mobile-prototype/README.md`.
 - NOT tested: anything on a physical iPhone. Frame rate, heat, real notch and home-bar insets, Safari address-bar behaviour and touch feel all need the device.
 - Published only as a Vercel preview deployment of this branch. The production link was not changed.
 
+### V1.2 vehicles, traffic, NPCs, native shells (branch `feature/vehicles-traffic-native-v1-2`, 2026-11-13)
+
+- Imported from the owner's `Ulaanbaatar_6_edition.zip`: drivable player vehicle (`src/player/vehicle.ts`), road-following AI traffic (`src/world/traffic.ts`), pedestrian NPCs (`src/world/npcs.ts`), procedural audio (`src/audio/`), Kenney Car Kit (CC0, licence in `assets/kenney-car-kit/License.txt`) with runtime GLBs in `public/models/vehicles/`, Capacitor iOS/Android shells, release docs in `mobile-prototype/docs/`.
+- Verified in the cloud on import: 32 unit tests pass, production build succeeds.
+- NOT verified: the native iOS/Android builds, any physical device, any deployment of this branch.
+
 ## Written, not yet compiled or run
 
 - The whole Unreal project in `unreal/Ulaanbaatar6/` (about 2,200 lines of C++ plus configs).

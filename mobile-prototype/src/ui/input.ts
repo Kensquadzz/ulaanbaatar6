@@ -8,10 +8,11 @@ export class Input {
   private lookId = -1; private lastX = 0; private lastY = 0;
   private keys = new Set<string>();
   private keyRun = false;
+  private braking = false;
   enabled = false;
 
   constructor(layer: HTMLElement, private stickEl: HTMLElement, knobEl: HTMLElement,
-              jumpBtn: HTMLElement, private runBtn: HTMLElement) {
+              jumpBtn: HTMLElement, private runBtn: HTMLElement, brakeBtn?: HTMLElement) {
     const R = 56;
     layer.addEventListener('pointerdown', (ev) => {
       if (!this.enabled) return;
@@ -49,6 +50,18 @@ export class Input {
       el.addEventListener('pointerdown', (ev) => { ev.preventDefault(); ev.stopPropagation(); if (this.enabled) fn(); });
     press(jumpBtn, () => { this.jumpQueued = true; });
     press(runBtn, () => { this.run = !this.run; runBtn.classList.toggle('active', this.run); });
+    if (brakeBtn) {
+      const stopBrake = () => { this.braking = false; brakeBtn.classList.remove('active'); };
+      brakeBtn.addEventListener('pointerdown', (ev) => {
+        ev.preventDefault(); ev.stopPropagation();
+        if (!this.enabled) return;
+        this.braking = true; brakeBtn.classList.add('active');
+        try { brakeBtn.setPointerCapture(ev.pointerId); } catch { /* optional */ }
+      });
+      brakeBtn.addEventListener('pointerup', stopBrake);
+      brakeBtn.addEventListener('pointercancel', stopBrake);
+      brakeBtn.addEventListener('lostpointercapture', stopBrake);
+    }
 
     window.addEventListener('keydown', (ev) => {
       if (!this.enabled) return;
@@ -69,7 +82,7 @@ export class Input {
 
   private reset() {
     this.stickId = this.lookId = -1; this.moveX = this.moveY = 0;
-    this.stickEl.classList.remove('on');
+    this.stickEl.classList.remove('on'); this.braking = false;
   }
 
   /** Returns and clears what happened since the last frame. */
@@ -81,7 +94,7 @@ export class Input {
       y = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
     }
     this.keyRun = k.has('ShiftLeft') || k.has('ShiftRight');
-    const out = { x, y, run: this.run || this.keyRun, jump: this.jumpQueued, lookDX: this.lookDX, lookDY: this.lookDY };
+    const out = { x, y, run: this.run || this.keyRun, jump: this.jumpQueued, brake: this.braking || k.has('Space'), lookDX: this.lookDX, lookDY: this.lookDY };
     this.jumpQueued = false; this.lookDX = this.lookDY = 0;
     return out;
   }
