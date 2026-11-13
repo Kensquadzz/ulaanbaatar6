@@ -9,7 +9,7 @@ import { NEUTRAL_SCENE, WeatherClient, freshness, sceneFromWeather, type SceneWe
 import { FollowCamera } from './player/camera';
 import { Character } from './player/character';
 import { Player, type World } from './player/player';
-import { Vehicle } from './player/vehicle';
+import { Vehicle, setVehicleLights } from './player/vehicle';
 import { CrowdManager } from './world/npcs';
 import { TrafficManager } from './world/traffic';
 import { AudioSystem } from './audio/audio';
@@ -20,6 +20,7 @@ import { ChunkManager } from './world/chunks';
 import { createMaterials } from './world/materials';
 import { Precipitation } from './world/precip';
 import { SkySystem } from './world/sky';
+import { PostFX } from './render/post';
 import type { ChunkData, Landmark, Manifest, Overview } from './world/types';
 
 import { pointInRing } from './core/geo';
@@ -115,6 +116,7 @@ async function boot() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(62, 1, 0.3, 14000);
+  const post = new PostFX(renderer, scene, camera);
   const hud = new Hud({
     onPlay: () => { started = true; input.enabled = true; void audio.start(); hud.start(); last = performance.now(); },
     onQuality: (q) => applyQuality(q),
@@ -190,7 +192,7 @@ async function boot() {
       const h = vehicle.heading;
       player.place(vehicle.east - Math.cos(h) * 2.0, vehicle.north + Math.sin(h) * 2.0, world);
       player.heading = h; player.speed = 0;
-      follow.distance = 4.9; follow.snap(); input.stopRun();
+      follow.distance = 4.3; follow.snap(); input.stopRun();
       hud.toast(forceExit ? 'Очих газрыг сонголоо.' : 'Машинаас буулаа.');
     }
     syncVehicleHud();
@@ -213,6 +215,7 @@ async function boot() {
     camera.fov = w / h > 2 ? 52 : 62;
     follow?.setBaseFov(camera.fov);
     camera.updateProjectionMatrix();
+    post.resize();
   }
   function setQuality(name: QualityName) {
     qName = name;
@@ -221,6 +224,7 @@ async function boot() {
     chunks.setQuality(q, mats);
     old.dispose();
     applyShadows(q);
+    post.configure(name);
     sky.configureShadows(q.shadowMap);
     character.setPbr(q.pbr);
     scene.remove(precip.points); precip.points.geometry.dispose();
@@ -241,6 +245,7 @@ async function boot() {
     hud.setQualityNote(`${qName.toUpperCase()} · ${Math.round(resScale * 100)}% · ${renderer.domElement.width}×${renderer.domElement.height}`);
   }
   applyShadows(QUALITY[qName]);
+  post.configure(qName);
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', () => setTimeout(resize, 250));
   resize();
@@ -360,11 +365,13 @@ async function boot() {
     (Object.keys(sceneW) as (keyof SceneWeather)[]).forEach((key) => { sceneW[key] += (target[key] - sceneW[key]) * k; });
     focus.set(px, py, pz);
     sky.update(sun, sceneW, focus, camera, (QUALITY[qName].farRings + 0.5) * CHUNK_M, clockS);
-    mats.setNight(sky.night); mats.setSnow(sceneW.snowCover);
+    mats.setNight(sky.night); mats.setSnow(sceneW.snowCover); chunks.landmarks.setNight(sky.night);
     precip.update(dt, camera.position, sceneW.rain, sceneW.snow, sceneW.windMs, sky.daylight);
 
+    post.setMood(sky.night, sceneW.cloud);
+    setVehicleLights(sky.night);
     renderer.info.reset();
-    renderer.render(scene, camera);
+    post.render();
 
     // HUD (throttled) and statistics
     if (started) { fpsFrames++; fpsTime += rawMs; worstMs = Math.max(worstMs, rawMs); }

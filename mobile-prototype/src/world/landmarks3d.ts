@@ -103,10 +103,26 @@ export class LandmarkModels {
   private models = new Map<string, THREE.Group>();
   private sizes = new Map<string, THREE.Vector3>();
   onReady: () => void = () => {};
+  /** window / sign materials of the landmark models that light up after dusk */
+  private glowing: THREE.MeshStandardMaterial[] = [];
+
+  setNight(n: number) { for (const m of this.glowing) m.emissiveIntensity = (m.userData.glow as number) * (0.03 + n); }
 
   constructor() {
     for (const m of [...LANDMARK_MODELS.map((l) => l.file), ...(SQUARE_MONUMENT_ENABLED ? [SQUARE_MONUMENT.file] : [])]) {
       loadHf(m).then((scene) => {
+        scene.traverse((o) => {
+          const mat = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+          if (!mat?.isMeshStandardMaterial || this.glowing.includes(mat)) return;
+          // glazing, signs and lettering glow at night (warm interior light / sign light); a look, not data
+          if (/glass|window|sign|letter|led|retail|light/i.test(mat.name)) {
+            const sign = /sign|letter|led/i.test(mat.name);
+            mat.emissive.set(sign ? 0xfff1d8 : /blue/i.test(mat.name) ? 0x8fb8ff : 0xffc983);
+            mat.userData.glow = sign ? 0.7 : /blue/i.test(mat.name) ? 0.06 : 0.18;
+            mat.emissiveIntensity = 0.05;
+            this.glowing.push(mat);
+          }
+        });
         this.models.set(m, scene);
         this.sizes.set(m, new THREE.Box3().setFromObject(scene).getSize(new THREE.Vector3()));
         for (const l of LANDMARK_MODELS) if (l.file === m) this.ready.add(l.id);

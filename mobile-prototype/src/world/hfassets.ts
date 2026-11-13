@@ -92,7 +92,8 @@ export function bakeVehicle(model: THREE.Object3D): void {
   model.updateMatrixWorld(true);
   const wheels: THREE.Object3D[] = [];
   model.traverse((o) => { if (o !== model && o.name.toLowerCase().includes('wheel')) wheels.push(o); });
-  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.28 });
+  // glossy paint: low roughness picks up the environment reflections set up in render/post.ts
+  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.28, metalness: 0.45 });
   for (const w of wheels) model.attach(w);
   for (const w of wheels) model.remove(w);
   const body = bakeGroup(model);

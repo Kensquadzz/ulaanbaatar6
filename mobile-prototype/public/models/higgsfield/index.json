@@ -100,7 +100,7 @@
     },
     {
       "file": "props/hf-street-tree.glb",
-      "shipped": false,
+      "shipped": true,
       "size_m": [
         1.7,
         3.7,

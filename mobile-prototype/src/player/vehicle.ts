@@ -14,6 +14,33 @@ export interface VehicleWorld {
 }
 export interface DriveInput { x: number; y: number; run: boolean; brake: boolean }
 
+/**
+ * One shared material for every car's head- and tail-light quads. Colours above 1.0 feed the bloom
+ * pass; `setVehicleLights` dims them by day and brightens them after dusk.
+ */
+const LIGHT_MAT = new THREE.MeshBasicMaterial({ vertexColors: true, fog: true, side: THREE.DoubleSide });
+export function setVehicleLights(night: number) { LIGHT_MAT.color.setScalar(0.55 + 2.2 * night); }
+setVehicleLights(0);
+function lightQuads(box: THREE.Box3): THREE.BufferGeometry {
+  const s = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+  const w = Math.min(0.42, s.x * 0.2), h = Math.min(0.14, s.y * 0.09), y = box.min.y + s.y * 0.42;
+  const pos: number[] = [], col: number[] = [];
+  const quad = (x: number, z: number, facing: 1 | -1, r: number, g: number, b: number) => {
+    const pts = [[x - w / 2, y - h / 2], [x + w / 2, y - h / 2], [x + w / 2, y + h / 2], [x - w / 2, y - h / 2], [x + w / 2, y + h / 2], [x - w / 2, y + h / 2]];
+    if (facing < 0) pts.reverse();
+    for (const [px, py] of pts) { pos.push(px, py, z); col.push(r, g, b); }
+  };
+  for (const side of [-1, 1]) {
+    const x = c.x + side * s.x * 0.33;
+    quad(x, box.max.z + 0.02, 1, 1.25, 1.2, 1.05);    // headlights (white)
+    quad(x, box.min.z - 0.02, -1, 1.2, 0.08, 0.04);   // tail lights (red)
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return g;
+}
+
 const moveToward = (v: number, target: number, amount: number) =>
   v < target ? Math.min(target, v + amount) : Math.max(target, v - amount);
 const mat = (color: number, roughness = 0.55, metalness = 0.12) =>
@@ -109,6 +136,10 @@ export class Vehicle {
       wrapper.scale.copy(scale);
       wrapper.position.y = -box.min.y * scale.y;
       wrapper.add(model);
+      // head/tail light quads on the model's own front (+Z) and back faces, for night and bloom
+      const lights = new THREE.Mesh(lightQuads(box), LIGHT_MAT);
+      lights.name = 'vehicle lights';
+      wrapper.add(lights);
       this.loadedWheels = [];
       model.traverse((node) => {
         const mesh = node as THREE.Mesh;

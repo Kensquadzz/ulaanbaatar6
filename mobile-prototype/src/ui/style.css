@@ -105,3 +105,18 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; touc
   #btnBrake { width: 56px; height: 56px; right: calc(max(14px, var(--sar)) + 154px); }
   #vehicleHud { bottom: calc(max(10px, var(--sab)) + 154px); }
 }
+
+/* ---- Visual V2: bolder open-world mobile controls (original styling) ---- */
+#minimap { border: 3px solid rgba(255,255,255,0.92); box-shadow: 0 0 0 2px rgba(0,0,0,0.35), 0 0 0 7px rgba(70,170,255,0.18), 0 6px 18px rgba(0,0,0,0.5); }
+#stick { border: 3px solid rgba(255,255,255,0.7); opacity: 0.85;
+  background: radial-gradient(circle at 50% 50%, rgba(0,0,0,0.05) 0 52%, rgba(10,14,26,0.28) 53% 100%);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.25), inset 0 0 20px rgba(0,0,0,0.3); }
+#knob { width: 56px; height: 56px; background: rgba(255,255,255,0.10);
+  border: 5px solid #ffb547; box-shadow: 0 0 14px rgba(255,170,60,0.85), inset 0 0 10px rgba(255,170,60,0.45); }
+.action { background: rgba(14,18,28,0.42); border: 3px solid rgba(255,255,255,0.88); text-shadow: 0 1px 3px rgba(0,0,0,0.85);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.3), 0 4px 14px rgba(0,0,0,0.4), inset 0 0 14px rgba(255,255,255,0.08); }
+.action:active { background: rgba(255,181,71,0.45); }
+#btnJump { border-width: 4px; }
+#btnCar.ready { border-color: #ffb547; box-shadow: 0 0 16px rgba(255,170,60,0.7), inset 0 0 12px rgba(255,170,60,0.35); }
+.round { border: 2px solid rgba(255,255,255,0.8); }
+#street .name { font-size: 15px; text-shadow: 0 2px 4px rgba(0,0,0,0.9); }

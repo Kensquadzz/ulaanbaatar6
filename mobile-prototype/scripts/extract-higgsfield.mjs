@@ -36,7 +36,7 @@ const ASSETS = [
   { file: 'props/hf-traffic-light.glb', roots: ['UB6_TRAFFIC_LIGHT_01'], kind: 'static', library: true },
   { file: 'props/hf-street-lamp.glb', roots: ['UB6_STREET_LAMP_01'], kind: 'static', library: true },
   { file: 'props/hf-bus-shelter.glb', roots: ['UB6_BUS_SHELTER_01'], kind: 'static', library: true },
-  { file: 'props/hf-street-tree.glb', roots: ['UB6_STREET_TREE_CROWN', 'UB6_STREET_TREE_TRUNK'], exact: true, kind: 'static', library: true },
+  { file: 'props/hf-street-tree.glb', roots: ['UB6_STREET_TREE_CROWN', 'UB6_STREET_TREE_TRUNK'], exact: true, kind: 'static' },
   { file: 'props/hf-snow-drift.glb', roots: ['WINTER_SNOW_DRIFT'], exact: true, kind: 'static', library: true },
   { file: 'props/hf-ger.glb', roots: ['GER_BODY', 'GER_ROOF', 'GER_DOOR'], exact: true, kind: 'static', library: true },
   { file: 'props/hf-horse.glb', roots: ['UB6_MONGOLIAN_HORSE_BASE'], kind: 'static', library: true },

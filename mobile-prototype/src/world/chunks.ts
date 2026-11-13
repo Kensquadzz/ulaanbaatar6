@@ -10,6 +10,7 @@ import type { Materials } from './materials';
 import { buildBuildings, buildRoads, buildTerrain, type MeshData } from './meshing';
 import { buildStreet, mergeMeshes, type Lamp } from './street';
 import { HeightField, sampleGrid } from './terrain';
+import { StreetTrees } from './trees';
 import { LandmarkModels, SQUARE_MONUMENT, SQUARE_MONUMENT_ENABLED } from './landmarks3d';
 import type { ChunkData, Manifest, Overview } from './types';
 
@@ -134,6 +135,8 @@ export class ChunkManager {
   private lampField: LampField;
   /** Higgsfield landmark models drawn on the real footprints of their buildings (stylised). */
   readonly landmarks = new LandmarkModels();
+  /** Higgsfield street trees on estimated sidewalk positions */
+  readonly trees = new StreetTrees();
   /** True while chunks are still being fetched or built for the current position. */
   get streaming() { return this.dirty; }
 
@@ -149,6 +152,7 @@ export class ChunkManager {
     this.root.add(this.backdrop.mesh);
     this.lampField = new LampField(mats);
     this.root.add(this.lampField.group);
+    this.root.add(this.trees.root);
     // when a landmark GLB arrives, rebuild the chunks that already drew its building as an extrusion
     this.landmarks.onReady = () => {
       this.entries.forEach((e) => {
@@ -305,6 +309,7 @@ export class ChunkManager {
     const near: Lamp[] = [], all: Lamp[] = [];
     this.entries.forEach((e) => { if (!e.group) return; for (const l of e.lamps) { all.push(l); if (e.lod === 0) near.push(l); } });
     this.lampField.set(near, all, this.height);
+    this.trees.set(near, this.height, this.colliders);
     this.triangles = t + this.lampField.triangles; this.builtChunks = c; this.lampCount = all.length;
   }
 }
