@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import type { ChunkData } from './types';
 import { loadCharacterRig, type CharacterRig } from './hfassets';
+import type { CarLike } from './carcollide';
 
 const HF_PEOPLE = ['characters/hf-player-winter.glb', 'characters/hf-woman-winter.glb'];
 type Limb = keyof CharacterRig['parts'];
@@ -19,10 +20,14 @@ interface Segment { a: [number, number]; b: [number, number]; length: number }
 interface Agent {
   route: Segment; t: number; direction: 1 | -1; speed: number; phase: number;
   coat: number; pants: number; hat: number; skin: number;
+  id: number; e: number; n: number; yaw: number;
+  /** walk = normal; down = knocked over by a car (lies still); getup = standing back up after treatment */
+  state: 'walk' | 'down' | 'getup'; stateT: number;
 }
 
 const COUNT = 18;
 const UP = new THREE.Vector3(0, 1, 0);
+const AXIS_X = new THREE.Vector3(1, 0, 0);
 const palettes = {
   coats: [0x1c2937, 0x3d4c5a, 0x543b32, 0x263e38, 0x6a3430, 0x35313d, 0x777064, 0x26334a],
   pants: [0x202631, 0x2e343d, 0x3b3029, 0x2b3d45, 0x414246],
@@ -77,6 +82,42 @@ export class CrowdManager {
   private capsules: THREE.InstancedMesh[] = [];
 
   get count() { return this.agents.length; }
+  private nextId = 1;
+  /** People currently lying on the ground after being hit, with their position. */
+  get injured() { return this.agents.filter((a) => a.state === 'down').map((a) => ({ id: a.id, e: a.e, n: a.n })); }
+
+  /**
+   * Knocks over every walking person this car is driving into (faster than ~9 km/h). Returns the ids
+   * of the people hit. They fall away from the car and stay down until `heal` is called.
+   */
+  hitBy(car: CarLike): number[] {
+    const out: number[] = [];
+    if (Math.abs(car.speed) < 2.5) return out;
+    const fe = Math.sin(car.heading), fn = Math.cos(car.heading), sign = Math.sign(car.speed);
+    for (const a of this.agents) {
+      if (a.state !== 'walk') continue;
+      const de = a.e - car.east, dn = a.n - car.north;
+      const along = de * fe + dn * fn, side = -de * fn + dn * fe;
+      if (Math.abs(along) > car.halfLength + 0.3 || Math.abs(side) > car.halfWidth + 0.3) continue;
+      a.state = 'down'; a.stateT = 0;
+      const push = Math.min(4, Math.abs(car.speed) * 0.25);
+      a.e += fe * sign * push; a.n += fn * sign * push;
+      a.yaw = Math.atan2(fe * sign, -fn * sign) + Math.PI;    // falls on the back, feet toward the car
+      out.push(a.id);
+    }
+    return out;
+  }
+  /** Test hook: knocks over the walking person nearest to (e, n). */
+  debugKnockNearest(e: number, n: number): number {
+    let best: Agent | null = null, bd = Infinity;
+    for (const a of this.agents) { const d = Math.hypot(a.e - e, a.n - n); if (a.state === 'walk' && d < bd) { bd = d; best = a; } }
+    if (!best) return 0;
+    best.state = 'down'; best.stateT = 0; return best.id;
+  }
+  /** Treated by the ambulance crew: stands up and walks on. */
+  heal(id: number) { const a = this.agents.find((x) => x.id === id); if (a && a.state === 'down') { a.state = 'getup'; a.stateT = 0; } }
+  /** Positions of people on foot, for keeping the player and cars out of them. */
+  forEachWalker(fn: (e: number, n: number) => void) { for (const a of this.agents) if (a.state === 'walk') fn(a.e, a.n); }
   /** 'higgsfield' once the Higgsfield bodies are in use, otherwise 'capsule'. */
   get bodyStyle() { return this.hf.length ? 'higgsfield' : 'capsule'; }
 
@@ -165,7 +206,8 @@ export class CrowdManager {
     this.lastCenter.set(east, north);
     this.rng = seeded((Math.floor(east / 32) * 73856093) ^ (Math.floor(north / 32) * 19349663) ^ 0x6b656e7a);
     const candidates = this.candidates(chunks, east, north);
-    this.agents = [];
+    // people who are down (or getting up) stay where they are until treated
+    this.agents = this.agents.filter((a) => a.state !== 'walk').slice(0, COUNT);
     if (!candidates.length) {
       // A tiny fallback plaza loop only when the local tiles contain no pedestrian paths.
       candidates.push(
@@ -177,7 +219,7 @@ export class CrowdManager {
     }
     // half of the crowd walks within ~70 m so people are actually seen around the player
     const close = candidates.filter((c) => Math.hypot((c.a[0] + c.b[0]) / 2 - east, (c.a[1] + c.b[1]) / 2 - north) < 70);
-    for (let i = 0; i < COUNT; i++) {
+    for (let i = this.agents.length; i < COUNT; i++) {
       const pool = i % 2 === 0 && close.length ? close : candidates;
       const r = pool[Math.floor(this.rng() * pool.length)];
       this.agents.push({
@@ -187,6 +229,7 @@ export class CrowdManager {
         pants: palettes.pants[Math.floor(this.rng() * palettes.pants.length)],
         hat: palettes.hats[Math.floor(this.rng() * palettes.hats.length)],
         skin: palettes.skin[Math.floor(this.rng() * palettes.skin.length)],
+        id: this.nextId++, e: r.a[0], n: r.a[1], yaw: 0, state: 'walk', stateT: 0,
       });
     }
     const color = (mesh: THREE.InstancedMesh, values: number[]) => {
@@ -225,20 +268,12 @@ export class CrowdManager {
     const armA = new THREE.Quaternion(), armB = new THREE.Quaternion();
     const axisX = new THREE.Vector3(1, 0, 0);
     for (let i = 0; i < this.agents.length; i++) {
-      const a = this.agents[i], s = a.route;
-      const step = (a.speed * dt) / s.length * a.direction;
-      a.t += step;
-      if (a.t > 1 || a.t < 0) {
-        a.direction = a.direction === 1 ? -1 : 1;
-        a.t = Math.max(0.02, Math.min(0.98, a.t));
-      }
-      const e = s.a[0] + (s.b[0] - s.a[0]) * a.t;
-      const n = s.a[1] + (s.b[1] - s.a[1]) * a.t;
-      const dx = (s.b[0] - s.a[0]) * a.direction;
-      const dn = (s.b[1] - s.a[1]) * a.direction;
-      const heading = Math.atan2(dx, dn);
-      const y = heightAt(e, n);
-      this.baseQ.setFromAxisAngle(UP, Math.PI + heading);
+      const a = this.agents[i];
+      const lie = this.step(a, dt);
+      const e = a.e, n = a.n;
+      const y = heightAt(e, n) + 0.2 * lie;
+      this.baseQ.setFromAxisAngle(UP, a.yaw);
+      if (lie > 0) this.baseQ.multiply(this.partQ.setFromAxisAngle(AXIS_X, -Math.PI / 2 * lie));
       const phase = this.phaseClock * (4.8 + a.speed * 1.4) + a.phase;
       const swing = Math.sin(phase) * 0.34;
       legA.setFromAxisAngle(axisX, swing);
@@ -261,6 +296,23 @@ export class CrowdManager {
     }
   }
 
+  /** Advances one person; returns how far they are lying down (0 standing .. 1 flat). */
+  private step(a: Agent, dt: number): number {
+    a.stateT += dt;
+    if (a.state === 'down') return Math.min(1, a.stateT / 0.35);
+    if (a.state === 'getup') {
+      if (a.stateT > 1.2) { a.state = 'walk'; a.route = { a: [a.e, a.n], b: [a.e + Math.sin(a.yaw) * 30, a.n - Math.cos(a.yaw) * 30], length: 30 }; a.t = 0; a.direction = 1; }
+      return Math.max(0, 1 - a.stateT / 1.2);
+    }
+    const s = a.route;
+    a.t += (a.speed * dt) / s.length * a.direction;
+    if (a.t > 1 || a.t < 0) { a.direction = a.direction === 1 ? -1 : 1; a.t = Math.max(0.02, Math.min(0.98, a.t)); }
+    a.e = s.a[0] + (s.b[0] - s.a[0]) * a.t;
+    a.n = s.a[1] + (s.b[1] - s.a[1]) * a.t;
+    a.yaw = Math.atan2((s.b[0] - s.a[0]) * a.direction, -(s.b[1] - s.a[1]) * a.direction);
+    return 0;
+  }
+
   private hfMat = new THREE.Matrix4();
   private hfLimb = new THREE.Matrix4();
   private hfRot = new THREE.Matrix4();
@@ -268,20 +320,16 @@ export class CrowdManager {
     const used = this.hf.map(() => 0);
     const base = this.hfMat, limb = this.hfLimb, rot = this.hfRot;
     for (let i = 0; i < this.agents.length; i++) {
-      const a = this.agents[i], s = a.route;
-      const step = (a.speed * _dt) / s.length * a.direction;
-      a.t += step;
-      if (a.t > 1 || a.t < 0) { a.direction = a.direction === 1 ? -1 : 1; a.t = Math.max(0.02, Math.min(0.98, a.t)); }
-      const e = s.a[0] + (s.b[0] - s.a[0]) * a.t;
-      const n = s.a[1] + (s.b[1] - s.a[1]) * a.t;
-      const de = (s.b[0] - s.a[0]) * a.direction, dn = (s.b[1] - s.a[1]) * a.direction;
+      const a = this.agents[i];
+      const lie = this.step(a, _dt);
       const body = this.hf[i % this.hf.length], k = i % this.hf.length, slot = used[k]++;
       const phase = this.phaseClock * (4.8 + a.speed * 1.4) + a.phase;
-      const swing = Math.sin(phase) * 0.42;
-      const bob = Math.abs(Math.sin(phase)) * 0.02;
-      // model faces +Z; world east = +x, north = -z, so facing (de, dn) is +Z turned by atan2(de, -dn)
-      this.baseQ.setFromAxisAngle(UP, Math.atan2(de, -dn));
-      base.compose(this.pos.set(e, heightAt(e, n) + bob, -n), this.baseQ, this.scale.setScalar(body.scale));
+      const swing = lie > 0 ? 0.25 * lie : Math.sin(phase) * 0.42;
+      const bob = lie > 0 ? 0.16 * lie : Math.abs(Math.sin(phase)) * 0.02;
+      // model faces +Z; world east = +x, north = -z. Lying: tipped back about the local X axis.
+      this.baseQ.setFromAxisAngle(UP, a.yaw);
+      if (lie > 0) this.baseQ.multiply(this.partQ.setFromAxisAngle(AXIS_X, -Math.PI / 2 * lie));
+      base.compose(this.pos.set(a.e, heightAt(a.e, a.n) + bob, -a.n), this.baseQ, this.scale.setScalar(body.scale));
       for (const name of LIMBS) {
         const p = body.rig.parts[name].pivot;
         const angle = name === 'body' ? 0 : name === 'hip_left' ? swing : name === 'hip_right' ? -swing

@@ -8,11 +8,12 @@ import { bakeVehicle } from '../world/hfassets';
 export interface VehicleWorld {
   heightAt(east: number, north: number): number;
   colliders: {
-    resolve(position: [number, number], minY: number, maxY: number, radius: number, stepUp: number, scratch: Collider[]): void;
+    resolve(position: [number, number], minY: number, maxY: number, radius: number, stepUp: number, scratch: Collider[], skipDeck?: boolean): void;
   };
   bounds: { minE: number; maxE: number; minN: number; maxN: number };
 }
-export interface DriveInput { x: number; y: number; run: boolean; brake: boolean }
+/** x steer (-1..1), y throttle (+) / reverse (-), run = boost, brake = foot brake, handbrake = slide. */
+export interface DriveInput { x: number; y: number; run: boolean; brake: boolean; handbrake?: boolean }
 
 /**
  * One shared material for every car's head- and tail-light quads. Colours above 1.0 feed the bloom
@@ -50,6 +51,12 @@ const mat = (color: number, roughness = 0.55, metalness = 0.12) =>
 export class Vehicle {
   readonly root = new THREE.Group();
   east = 0; north = 0; y = 0; heading = 0; speed = 0;
+  /** Half extents of the body footprint in metres (from the loaded model), used for car-to-car collision. */
+  halfLength = 2.15; halfWidth = 0.92; height = 1.6;
+  /** Optional surface height (bridge decks): given the previous Y, returns the Y to drive on. */
+  surfaceAt: ((e: number, n: number, prevY: number) => number) | null = null;
+  /** Shared default for every car (set once the bridge data is loaded). */
+  static surface: ((e: number, n: number, prevY: number) => number) | null = null;
   private wheels: THREE.Group[] = [];
   private frontWheels: THREE.Group[] = [];
   private scratch: Collider[] = [];
@@ -120,7 +127,7 @@ export class Vehicle {
    * `fit.native` it keeps its own proportions and is scaled uniformly by `fit.scale` (default 1):
    * used for the Higgsfield vehicles, which are modelled in metres.
    */
-  async loadModel(url: string, fit: { native?: boolean; scale?: number } = {}): Promise<boolean> {
+  async loadModel(url: string, fit: { native?: boolean; scale?: number; box?: [number, number, number] } = {}): Promise<boolean> {
     try {
       const gltf = await this.loader.loadAsync(url);
       const model = gltf.scene;
@@ -131,7 +138,8 @@ export class Vehicle {
       if (!Number.isFinite(size.x) || size.x <= 0 || size.y <= 0 || size.z <= 0) return false;
       const scale = fit.native
         ? new THREE.Vector3().setScalar(fit.scale ?? 1)
-        : new THREE.Vector3(1.82 / size.x, 1.72 / size.y, 3.82 / size.z);
+        : new THREE.Vector3((fit.box?.[0] ?? 1.82) / size.x, (fit.box?.[1] ?? 1.72) / size.y, (fit.box?.[2] ?? 3.82) / size.z);
+      this.halfLength = (size.z * scale.z) / 2; this.halfWidth = (size.x * scale.x) / 2; this.height = size.y * scale.y;
       const wrapper = new THREE.Group();
       wrapper.scale.copy(scale);
       wrapper.position.y = -box.min.y * scale.y;
@@ -191,20 +199,22 @@ export class Vehicle {
     const throttle = Math.max(0, Math.min(1, input.y));
     const reverse = Math.max(0, Math.min(1, -input.y));
 
-    if (input.brake) this.speed = moveToward(this.speed, 0, 15 * h);
+    if (input.handbrake) this.speed = moveToward(this.speed, 0, 7.5 * h);
+    else if (input.brake) this.speed = moveToward(this.speed, 0, 15 * h);
     else if (reverse > 0.08) {
       if (this.speed > 0.5) this.speed = moveToward(this.speed, 0, 10 * reverse * h);
       else this.speed = Math.max(-7, this.speed - 3.0 * reverse * h);
     } else if (throttle > 0.08) {
-      const cap = input.run ? 34 : 26;
-      this.speed = Math.min(cap, this.speed + (4.8 + (input.run ? 2.7 : 0)) * throttle * grip * h);
+      const cap = input.run ? 40 : 26;
+      this.speed = Math.min(cap, this.speed + (4.8 + (input.run ? 5.5 : 0)) * throttle * grip * h);
     } else {
       this.speed *= Math.exp(-0.78 * h);
       if (Math.abs(this.speed) < 0.04) this.speed = 0;
     }
 
     // Reduced steering at high speed; snow/rain lower available grip.
-    const steer = input.x * (0.52 / (1 + Math.abs(this.speed) * 0.05)) * grip;
+    // the handbrake locks the rear wheels: the car turns much tighter and slides (original tuning)
+    const steer = input.x * (0.52 / (1 + Math.abs(this.speed) * 0.05)) * grip * (input.handbrake ? 1.9 : 1);
     if (Math.abs(this.speed) > 0.05) this.heading += (this.speed / 2.72) * Math.tan(steer) * h;
 
     const beforeE = this.east, beforeN = this.north;
@@ -212,14 +222,15 @@ export class Vehicle {
       this.east + Math.sin(this.heading) * this.speed * h,
       this.north + Math.cos(this.heading) * this.speed * h,
     ];
-    world.colliders.resolve(pos, this.y, this.y + 1.75, 1.02, 0, this.scratch);
+    world.colliders.resolve(pos, this.y, this.y + 1.75, 1.02, 0, this.scratch, true);
     const b = world.bounds;
     this.east = Math.max(b.minE, Math.min(b.maxE, pos[0]));
     this.north = Math.max(b.minN, Math.min(b.maxN, pos[1]));
     const moved = Math.hypot(this.east - beforeE, this.north - beforeN);
     if (moved < Math.abs(this.speed) * h * 0.2) this.speed *= 0.12;
 
-    this.y = world.heightAt(this.east, this.north);
+    const surf = this.surfaceAt ?? Vehicle.surface;
+    this.y = surf ? surf(this.east, this.north, this.y) : world.heightAt(this.east, this.north);
     this.root.position.set(this.east, this.y, -this.north);
     this.root.rotation.y = Math.PI - this.heading;   // +Z front; matches the character (heading is clockwise from north)
     this.frontWheels.forEach(w => { w.rotation.y = -steer; });

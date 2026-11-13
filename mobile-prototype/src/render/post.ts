@@ -4,7 +4,7 @@
 //
 // Cost is tied to the graphics profile:
 //   HIGH   bloom (half resolution) + grade + environment reflections
-//   MEDIUM bloom (quarter resolution) + grade + environment reflections
+//   MEDIUM plain render + environment reflections (no full-screen passes: cooler phone, 2026-11-13)
 //   LOW    plain render (no extra passes), no environment map
 // All of it is original shader code and the three.js example passes (MIT).
 import * as THREE from 'three';
@@ -60,7 +60,7 @@ export class PostFX {
       }
       this.scene.environment = this.envTex;
     } else this.scene.environment = null;
-    if (profile === 'low') return;
+    if (profile !== 'high') return;
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: profile === 'high' ? 4 : 0 });
     const composer = new EffectComposer(this.renderer, rt);

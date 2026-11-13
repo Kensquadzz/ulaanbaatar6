@@ -24,6 +24,9 @@ export class FollowCamera {
     this.pitch = Math.max(-0.35, Math.min(1.25, this.pitch + dy * 0.004 * sensitivity));
   }
   snap() { this.init = false; }
+  private shakeAmt = 0;
+  /** Short camera shake after a crash (0..1). */
+  shake(k: number) { this.shakeAmt = Math.max(this.shakeAmt, k); }
   setBaseFov(fov: number) { this.baseFov = fov; }
 
   update(dt: number, px: number, py: number, pz: number, heightAt: (e: number, n: number) => number, colliders: ColliderSet, speed = 0) {
@@ -59,6 +62,11 @@ export class FollowCamera {
     c.position.set(this.target.x + bx * this.cur + rx * sh, this.target.y + by * this.cur, this.target.z + bz * this.cur + rz * sh);
     const floor = heightAt(c.position.x, -c.position.z) + 0.35;
     if (c.position.y < floor) c.position.y = floor;
+    if (this.shakeAmt > 0.001) {
+      const a = this.shakeAmt * 0.25;
+      c.position.x += (Math.random() - 0.5) * a; c.position.y += (Math.random() - 0.5) * a; c.position.z += (Math.random() - 0.5) * a;
+      this.shakeAmt *= Math.exp(-dt * 7);
+    }
     this.look_.set(this.target.x + rx * sh, this.target.y + 0.12, this.target.z + rz * sh);
     c.lookAt(this.look_);
     const fov = this.baseFov + 5 * this.boost;

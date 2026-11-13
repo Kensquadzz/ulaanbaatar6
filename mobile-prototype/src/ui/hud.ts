@@ -8,14 +8,14 @@ import { getLang, setLang, t, type Lang } from './i18n';
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 export type QualityChoice = 'auto' | 'low' | 'medium' | 'high';
 export type WeatherChoice = 'live' | 'clear' | 'cloudy' | 'snow' | 'rain' | 'fog';
-export interface Prefs { lang: Lang; quality: QualityChoice; sens: number; showFps: boolean }
+export interface Prefs { lang: Lang; quality: QualityChoice; sens: number; showFps: boolean; fpsCap: 30 | 60 }
 export interface HudEvents {
   onPlay(): void; onQuality(q: QualityChoice): void; onTimeMode(live: boolean, hour: number): void;
   onWeather(w: WeatherChoice): void; onTravel(key: string): void; onPause(open: boolean): void;
 }
 const PREF_KEY = 'ub6.prefs';
 export function loadPrefs(): Prefs {
-  const d: Prefs = { lang: 'mn', quality: 'auto', sens: 1, showFps: false };
+  const d: Prefs = { lang: 'mn', quality: 'auto', sens: 1, showFps: false, fpsCap: 30 };
   try { return { ...d, ...JSON.parse(localStorage.getItem(PREF_KEY) || '{}') }; } catch { return d; }
 }
 const ICON: Record<string, string> = { clear: '☀', partly: '⛅', cloudy: '☁', fog: '🌫', drizzle: '🌦', rain: '🌧', snow: '❄', thunder: '⛈', unknown: '·' };
@@ -37,7 +37,7 @@ export class Hud {
 
   constructor(private ev: HudEvents, landmarks: Record<string, Landmark>, attribution: string[]) {
     setLang(this.prefs.lang);
-    this.seg('segLang', this.prefs.lang); this.seg('segQuality', this.prefs.quality);
+    this.seg('segLang', this.prefs.lang); this.seg('segQuality', this.prefs.quality); this.seg('segFps', String(this.prefs.fpsCap));
     this.seg('segTime', 'live'); this.seg('segWeather', 'live');
     $<HTMLInputElement>('sens').value = String(this.prefs.sens);
     $<HTMLInputElement>('showFps').checked = this.prefs.showFps;
@@ -52,6 +52,7 @@ export class Hud {
     $('settings').addEventListener('click', (e) => { if (e.target === $('settings')) open(false); });
     this.onSeg('segLang', (v) => { this.prefs.lang = v as Lang; setLang(v as Lang); this.save(); this.fillTravel(landmarks, open); });
     this.onSeg('segQuality', (v) => { this.prefs.quality = v as QualityChoice; this.save(); ev.onQuality(v as QualityChoice); });
+    this.onSeg('segFps', (v) => { this.prefs.fpsCap = v === '60' ? 60 : 30; this.save(); });
     const hour = $<HTMLInputElement>('hour');
     const emitTime = () => {
       const live = !document.querySelector('#segTime button[data-v="free"]')!.classList.contains('on');
@@ -88,7 +89,13 @@ export class Hud {
     if (p >= 1 && !error) $('loadText').style.visibility = 'hidden';
   }
   start() { $('loading').classList.add('hidden'); $('hud').classList.remove('hidden'); }
-  toast(text: string | null) { $('toast').classList.toggle('hidden', !text); if (text) $('toast').textContent = text; }
+  private toastTimer = 0;
+  /** Shows a message at the bottom; with `seconds` it hides itself again. */
+  toast(text: string | null, seconds = 0) {
+    clearTimeout(this.toastTimer);
+    $('toast').classList.toggle('hidden', !text); if (text) $('toast').textContent = text;
+    if (text && seconds > 0) this.toastTimer = window.setTimeout(() => $('toast').classList.add('hidden'), seconds * 1000);
+  }
   setFps(text: string) { if (this.prefs.showFps) $('fps').textContent = text; }
   setQualityNote(text: string) { $('qualityNote').textContent = text; }
 

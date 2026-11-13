@@ -105,3 +105,33 @@ Return updated source and ZIP, verified Vercel preview URL, actual gameplay scre
   no 404s or page errors; draw calls at Peace Avenue HIGH 86 / MEDIUM 80 / LOW 53
   (before: 77 / 73 / 52); triangles HIGH 172k / MEDIUM 143k / LOW 115k (before: 133k / 106k / 81k).
 - Still not tested on a physical iPhone/Android. Player character is still procedural.
+
+## Update 2026-11-13 (later): Gameplay V3, after the owner's first iPhone test
+
+Owner feedback (iPhone Safari): phone gets hot; Peace / Olympic bridges, footways and bus stops only
+exist as map lines; driving by pushing the joystick forward is awkward; cars drive through each
+other; hitting people has no consequence (wants ambulance and police like an open-world crime game).
+
+Done (original rules, UI and code; no assets or names from other games):
+- Heat: frame cap 30 fps by default (Settings: 30 / 60), MEDIUM pixel ratio 1.25 and no full-screen
+  post passes (bloom + grade only on HIGH). Never verified on a phone yet.
+- Driving: left thumb joystick steers only; right thumb hold buttons ХИЙ (gas), ТОРМОЗ (brake, holding
+  at a stop reverses), BOOST, ГАР ТОРМОЗ (handbrake slide); БУУХ moved to top right; speedometer
+  bottom centre. Camera swings in behind the car when the view is not being dragged. Keyboard:
+  W/S/A/D, Shift boost, Space handbrake.
+- Collisions: `src/world/carcollide.ts` capsule-vs-capsule for every car (player, traffic, police,
+  ambulance, parked player car); traffic brakes for cars ahead and stops a few seconds after a hit;
+  people on foot cannot walk through cars. Crash sound + camera shake.
+- Incidents: `src/world/incidents.ts`. A pedestrian hit at > 9 km/h falls and stays down; an
+  ambulance (Kenney CC0 model) drives there, treats them for ~7 s, they stand up, ambulance leaves.
+  Police badge (0..5) at top right; up to 3 police cars chase; stopped next to police for ~2 s =
+  caught (fine message, level reset); no police within 80 m for 18 s lowers the level. Ramming a
+  police car raises it. Siren is synthesized. AI drives straight at its target and respawns on a
+  nearby road point when stuck (no road pathfinding yet).
+- Bridges and rail: `pipeline/ub6pipeline/build_bridges.py` -> `data/tiles/bridges.json` (105 real
+  bridges from Overture is_bridge ranges, chained, deck height ESTIMATED from length: about 7 m on the
+  Peace Avenue, Olympic and Sun bridges) and `rail.json` (54 real railway lines, drawn as 1520 mm
+  track). `src/world/bridges.ts` draws deck, sloped parapets and piers; cars drive up and over; roads
+  and people pass underneath.
+- Bus stops: NOT added. Overture places has no bus-stop data and the OSM Overpass host is blocked
+  from the cloud machine, so there is no real source; nothing was invented.

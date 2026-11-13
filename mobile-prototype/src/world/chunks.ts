@@ -13,6 +13,7 @@ import { HeightField, sampleGrid } from './terrain';
 import { StreetTrees } from './trees';
 import { LandmarkModels, SQUARE_MONUMENT, SQUARE_MONUMENT_ENABLED } from './landmarks3d';
 import type { ChunkData, Manifest, Overview } from './types';
+import { Bridges, type Bridge } from './bridges';
 
 interface Entry {
   cx: number; cy: number; key: string;
@@ -137,6 +138,17 @@ export class ChunkManager {
   readonly landmarks = new LandmarkModels();
   /** Higgsfield street trees on estimated sidewalk positions */
   readonly trees = new StreetTrees();
+  /** Real bridge decks (estimated heights) and railway tracks */
+  readonly bridges = new Bridges();
+  private bridgeMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  /** Call once the bridge data has arrived; chunks already built are rebuilt with their bridges. */
+  setBridges(bridges: Bridge[], rail: { pts: [number, number][]; flags: string[] }[]) {
+    this.bridges.load(bridges, rail);
+    this.entries.forEach((e) => { if (e.group) this.dropGroup(e); });
+    this.dirty = true;
+  }
+  /** Height to stand or drive on (bridge deck or terrain), given the previous height. */
+  surfaceAt(e: number, n: number, prevY: number) { return this.bridges.surface(e, n, prevY, this.height.heightAt(e, n)); }
   /** True while chunks are still being fetched or built for the current position. */
   get streaming() { return this.dirty; }
 
@@ -285,15 +297,21 @@ export class ChunkManager {
     // far chunks: carriageways are painted into the ground texture instead of being a second mesh
     const tex = paintGround(d, near ? this.q.groundTexNear : this.q.groundTexFar, !near);
     add(buildTerrain(grid, n, e.cx, e.cy, (ee, nn) => this.height.heightAt(ee, nn)), this.mats.makeGround(tex), true, false, true, 'terrain');
-    const street = buildStreet(d.roads, d.buildings, e.cx, e.cy, hAt, near);
-    if (near) add(mergeMeshes(buildRoads(d.roads, e.cx, e.cy, hAt, true), street), this.mats.road, false, false, true, 'roads');
+    // bridge roads are drawn on their deck (no sidewalks or lamps on the ground underneath)
+    const onBridge = (r: { id: string }) => this.bridges.isBridgeRoad(r.id);
+    const groundRoads = d.roads.filter((r) => !onBridge(r)), bridgeRoads = d.roads.filter(onBridge);
+    const deckH = (east: number, north: number) => this.bridges.deckAt(east, north, 0.6) ?? hAt(east, north);
+    const street = buildStreet(groundRoads, d.buildings, e.cx, e.cy, hAt, near);
+    if (near) add(mergeMeshes(mergeMeshes(buildRoads(groundRoads, e.cx, e.cy, hAt, true), buildRoads(bridgeRoads, e.cx, e.cy, deckH, true)), street), this.mats.road, false, false, true, 'roads');
+    const br = this.bridges.build(e.cx, e.cy, hAt);
+    if (br.mesh.index.length) add(br.mesh, this.bridgeMat, false, near, near, 'bridges');
     e.lamps = street.lamps;
     const replaced = d.buildings.filter((x) => this.landmarks.replaces(x));
     const drawn = replaced.length ? d.buildings.filter((x) => !replaced.includes(x)) : d.buildings;
     const b = buildBuildings(drawn, e.cx, e.cy, hAt, near, near ? 0 : this.q.farMinAreaM2);
     add(b, this.mats.building, false, near, near, 'buildings');
     // replaced landmarks keep the collision of their real footprint
-    if (near) this.colliders.set(e.key, replaced.length ? b.colliders.concat(buildBuildings(replaced, e.cx, e.cy, hAt, false).colliders) : b.colliders);
+    if (near) this.colliders.set(e.key, (replaced.length ? b.colliders.concat(buildBuildings(replaced, e.cx, e.cy, hAt, false).colliders) : b.colliders).concat(br.colliders));
     this.landmarks.place(replaced, e.cx, e.cy, group, hAt);
     group.updateMatrixWorld(true);
     this.root.add(group);

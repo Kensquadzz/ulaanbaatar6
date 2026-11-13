@@ -22,7 +22,9 @@ const manifest = JSON.parse(fs.readFileSync(path.join(src, 'manifest.json'), 'ut
 fs.copyFileSync(path.join(src, 'manifest.json'), path.join(dst, 'manifest.json'));
 fs.copyFileSync(path.join(src, 'landmarks.json'), path.join(dst, 'landmarks.json'));
 // district outlines (Overture divisions, see pipeline/ub6pipeline/build_districts.py); optional
-if (fs.existsSync(path.join(src, 'districts.json'))) fs.copyFileSync(path.join(src, 'districts.json'), path.join(dst, 'districts.json'));
+for (const f of ['districts.json', 'bridges.json', 'rail.json']) {      // optional extras (see pipeline/ub6pipeline)
+  if (fs.existsSync(path.join(src, f))) fs.copyFileSync(path.join(src, f), path.join(dst, f));
+}
 
 const N = manifest.height_grid_n;            // 17
 const STEP = 4;                               // every 4th sample -> 64 m

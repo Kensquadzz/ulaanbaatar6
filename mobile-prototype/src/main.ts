@@ -21,6 +21,8 @@ import { createMaterials } from './world/materials';
 import { Precipitation } from './world/precip';
 import { SkySystem } from './world/sky';
 import { PostFX } from './render/post';
+import { Incidents } from './world/incidents';
+import { pushCircleFromCars, resolveCars, type CarBody, type CarHit } from './world/carcollide';
 import type { ChunkData, Landmark, Manifest, Overview } from './world/types';
 
 import { pointInRing } from './core/geo';
@@ -130,6 +132,11 @@ async function boot() {
 
   let mats = createMaterials(QUALITY[qName]);
   const chunks = new ChunkManager(DATA, manifest, overview, mats, QUALITY[qName]);
+  // real bridges (deck heights estimated) and railway lines; optional, the city works without them
+  Promise.all([fetch(DATA + 'bridges.json').then((r) => (r.ok ? r.json() : null)), fetch(DATA + 'rail.json').then((r) => (r.ok ? r.json() : null))])
+    .then(([b, r]) => { if (b?.bridges) chunks.setBridges(b.bridges, r?.lines ?? []); })
+    .catch((err) => console.warn('bridges/rail data unavailable', err));
+  Vehicle.surface = (e, n, prevY) => chunks.surfaceAt(e, n, prevY);
   scene.add(chunks.root);
   const sky = new SkySystem(scene, QUALITY[qName].shadowMap);
   let precip = new Precipitation(QUALITY[qName].particles);
@@ -153,6 +160,25 @@ async function boot() {
   const follow = new FollowCamera(camera);
   follow.yaw = Math.PI;                         // start looking south, toward Peace Avenue and Zaisan
   const input = new Input($('touch'), $('stick'), $('knob'), $('btnJump'), $('btnRun'), $('btnBrake'));
+  input.hold($('btnGas'), 'gas'); input.hold($('btnBoost'), 'boost'); input.hold($('btnHand'), 'hand'); input.hold($('btnBrake'), 'brake');
+  // ---- incidents: injured pedestrians, ambulance, police wanted level ----
+  function roadPointNear(e: number, n: number, minD: number, maxD: number): [number, number] | null {
+    const pts: [number, number][] = [];
+    chunks.forNearData(2, (d) => {
+      for (const r of d.roads) {
+        if (!r.drivable || !['primary', 'secondary', 'tertiary', 'residential', 'trunk', 'unclassified'].includes(r.class)) continue;
+        for (const p of r.pts) { const dd = Math.hypot(p[0] - e, p[1] - n); if (dd >= minD && dd <= maxD) pts.push([p[0], p[1]]); }
+      }
+    });
+    return pts.length ? pts[Math.floor(Math.random() * pts.length)] : null;
+  }
+  const incidents = new Incidents(import.meta.env.BASE_URL + 'models/vehicles/', {
+    roadPointNear, heal: (id) => crowd.heal(id), toast: (text) => hud.toast(text, 4), sound: audio,
+  });
+  scene.add(incidents.root);
+  const carBodies: CarBody[] = [];
+  const carHits: CarHit[] = [];
+  let ramCooldown = 0;
   const weather = new WeatherClient();
 
   const xs = manifest.chunks.map((c) => c.x), ys = manifest.chunks.map((c) => c.y);
@@ -173,7 +199,9 @@ async function boot() {
     $('btnJump').classList.toggle('hidden', inVehicle);
     $('btnBrake').classList.toggle('hidden', !inVehicle);
     $('vehicleHud').classList.toggle('hidden', !inVehicle);
-    $('btnRun').textContent = inVehicle ? 'BOOST' : t('run').toUpperCase();
+    $('btnRun').textContent = t('run').toUpperCase();
+    document.body.classList.toggle('driving', inVehicle);
+    input.driveMode = inVehicle;
   };
   vehicleControl = (forceExit = false) => {
     if (!inVehicle) {
@@ -183,7 +211,7 @@ async function boot() {
       player.e = vehicle.east; player.n = vehicle.north; player.y = vehicle.y;
       player.heading = vehicle.heading; player.ve = player.vn = player.vy = 0; player.speed = 0;
       input.stopRun(); follow.distance = 7.4; follow.snap();
-      hud.toast('ЖОЛООДЛОГО · joystick · BOOST · ТОРМОЗ');
+      hud.toast('Зүүн гар: жолоо · Баруун гар: ХИЙ, ТОРМОЗ (удаан дарвал ухарна), BOOST, ГАР ТОРМОЗ', 5);
     } else {
       if (!forceExit && Math.abs(vehicle.speed) > 0.65) {
         hud.toast('Машиныг зогсоогоод бууна уу.'); return;
@@ -259,13 +287,14 @@ async function boot() {
   const ORDER: QualityName[] = ['low', 'medium', 'high'];
   function govern() {
     if (choice !== 'auto' || warm < 6 || paused || chunks.streaming) return;
-    if (fps < TARGET_FPS - 3) { govLow++; govHigh = 0; } else if (fps > 50) { govHigh++; govLow = 0; } else { govLow = govHigh = 0; }
+    const capped = hud.prefs.fpsCap === 30;
+    if (fps < TARGET_FPS - 3) { govLow++; govHigh = 0; } else if (capped ? fps > 29 : fps > 50) { govHigh++; govLow = 0; } else { govLow = govHigh = 0; }
     if (govLow >= 2) {
       govLow = 0;
       if (resScale > 0.72) { resScale = Math.max(0.7, resScale - 0.15); resize(); noteQuality(); }
       else if (qName !== 'low') { demoted = true; resScale = 0.85; setQuality(ORDER[ORDER.indexOf(qName) - 1]); }
     } else if (govHigh >= 6 && resScale < 1) { govHigh = 0; resScale = Math.min(1, resScale + 0.1); resize(); noteQuality(); }
-    else if (govHigh >= 15 && fps >= 55 && !promoted && !demoted && qName !== 'high') { govHigh = 0; promoted = true; warm = 0; setQuality(ORDER[ORDER.indexOf(qName) + 1]); }
+    else if (govHigh >= 15 && !capped && fps >= 55 && !promoted && !demoted && qName !== 'high') { govHigh = 0; promoted = true; warm = 0; setQuality(ORDER[ORDER.indexOf(qName) + 1]); }
   }
 
   // ---- helpers -------------------------------------------------------------------------------
@@ -306,6 +335,7 @@ async function boot() {
   }
 
   // ---- main loop -----------------------------------------------------------------------------
+  let lookIdle = 0;
   let last = performance.now(), hudTimer = 0, mapTimer = 0, crowdTimer = 0, clockS = 0, sunT: SunTimes | null = null, sunDay = -1;
   let lastInput = { x: 0, y: 0, run: false, jump: false, brake: false, lookDX: 0, lookDY: 0 };
   const focus = new THREE.Vector3();
@@ -313,6 +343,10 @@ async function boot() {
 
   function frame(now: number) {
     requestAnimationFrame(frame);
+    // Frame cap (default 30 fps): on 60/120 Hz screens every other refresh is skipped, which halves
+    // GPU and CPU work and is the biggest single saving against the phone heating up.
+    const cap = started ? hud.prefs.fpsCap : 60;
+    if (now - last < 1000 / cap - 2) return;
     const rawMs = now - last;
     const dt = Math.min(0.05, Math.max(0.001, rawMs / 1000));
     last = now;
@@ -333,9 +367,25 @@ async function boot() {
     lastInput = inp;
     if (started && !paused) {
       follow.look(inp.lookDX, inp.lookDY, hud.prefs.sens);
+      lookIdle = inp.lookDX || inp.lookDY ? 0 : lookIdle + dt;
+      // driving: when the player is not dragging the view, the camera swings in behind the car
+      if (inVehicle && lookIdle > 0.9 && Math.abs(vehicle.speed) > 2) {
+        let d = vehicle.heading - follow.yaw; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+        follow.yaw += d * (1 - Math.exp(-dt * 2.2));
+      }
       if (!pendingPlace && terrainReady) {
         if (inVehicle) {
-          vehicle.update(dt, inp, world, sceneW.snowCover, sceneW.rain);
+          // right thumb: gas / brake (holding it at a stop reverses) / boost / handbrake; left thumb steers
+          const gas = input.isHeld('gas') || input.key('KeyW', 'ArrowUp');
+          const brakeHeld = input.isHeld('brake') || input.key('KeyS', 'ArrowDown');
+          const drive = {
+            x: inp.x,
+            y: gas ? 1 : brakeHeld && vehicle.speed < 0.8 ? -1 : 0,
+            brake: brakeHeld && vehicle.speed >= 0.8,
+            run: input.isHeld('boost') || input.key('ShiftLeft', 'ShiftRight'),
+            handbrake: input.isHeld('hand') || input.key('Space'),
+          };
+          vehicle.update(dt, drive, world, sceneW.snowCover, sceneW.rain);
           player.e = vehicle.east; player.n = vehicle.north; player.y = vehicle.y;
           player.heading = vehicle.heading; player.speed = Math.abs(vehicle.speed);
         } else player.update(dt, inp, follow.yaw, world);
@@ -350,7 +400,41 @@ async function boot() {
       traffic.rebuild(crowdData, player.e, player.n, world.heightAt);
       crowdTimer = 6;
     }
-    if (started) { crowd.update(dt, world.heightAt); traffic.update(dt, world, sceneW.snowCover, sceneW.rain); }
+    if (started) {
+      const others = [vehicle, ...incidents.vehicles];
+      crowd.update(dt, world.heightAt);
+      traffic.update(dt, world, sceneW.snowCover, sceneW.rain, [...others, ...traffic.vehicles]);
+      // car-to-car collision for every car in the scene (the parked player car included)
+      carBodies.length = 0;
+      carBodies.push({ car: vehicle, mass: 1.3 });
+      for (const v of traffic.vehicles) if (v.root.visible) carBodies.push({ car: v, mass: traffic.massOf(v) });
+      for (const v of incidents.vehicles) carBodies.push({ car: v, mass: 1.6 });
+      resolveCars(carBodies, carHits);
+      ramCooldown = Math.max(0, ramCooldown - dt);
+      for (const h of carHits) {
+        const a = carBodies[h.a].car, b = carBodies[h.b].car;
+        for (const v of [a, b]) if (traffic.vehicles.includes(v as Vehicle)) traffic.stun(v as Vehicle, 2 + h.impact * 0.3);
+        if (a === vehicle || b === vehicle) {
+          if (h.impact > 1.5) audio.crash(h.impact / 14);
+          if (h.impact > 6 && inVehicle) follow.shake(Math.min(1, h.impact / 20));
+          const other = a === vehicle ? b : a;
+          if (inVehicle && h.impact > 3 && incidents.isPolice(other as Vehicle) && ramCooldown <= 0) { incidents.policeRammed(); ramCooldown = 3; }
+        }
+      }
+      if (inVehicle) {
+        for (const id of crowd.hitBy(vehicle)) {
+          const hurt = crowd.injured.find((x) => x.id === id);
+          audio.crash(0.35);
+          if (hurt) incidents.pedestrianHit(id, hurt.e, hurt.n);
+        }
+      } else if (!pendingPlace) {
+        // on foot: cars are solid
+        const pos: [number, number] = [player.e, player.n];
+        if (pushCircleFromCars(pos, 0.38, carBodies.map((c) => c.car))) { player.e = pos[0]; player.n = pos[1]; }
+      }
+      const caught = incidents.update(dt, { e: player.e, n: player.n, speed: inVehicle ? Math.abs(vehicle.speed) : player.speed }, world, world.heightAt);
+      if (caught) { if (inVehicle) vehicleControl(true); hud.toast('ЦАГДААД БАРИГДЛАА! Торгууль ногдууллаа.', 5); }
+    }
     audio.update(dt, inVehicle ? Math.abs(vehicle.speed) : player.speed, inVehicle, sceneW.rain, sceneW.snow);
     if (!inVehicle) character.update(dt, px, py, pz, player.heading, player.speed, player.grounded, player.vy);
     follow.update(dt, px, inVehicle ? py - 0.25 : py, pz, world.heightAt, chunks.colliders, player.speed);
@@ -417,6 +501,10 @@ async function boot() {
   // small hook for automated tests and performance captures (scripts/perf.mjs)
   (window as any).__ub6 = {
     stats: () => ({ ...stats, e: player.e, n: player.n, y: player.y, speed: player.speed, grounded: player.grounded, yaw: follow.yaw, near: chunks.nearProgress(), colliders: chunks.colliders.count, pending: !!pendingPlace, streaming: chunks.streaming, worstBuildMs: chunks.worstBuildMs, inVehicle, vehicleSpeed: vehicle.speed, vehicleEast: vehicle.east, vehicleNorth: vehicle.north, input: lastInput, pedestrians: crowd.count, traffic: traffic.count, trafficModelsReady: traffic.modelsReady, trafficModelStates: traffic.modelStates, vehicleAsset: vehicle.root.userData.assetStatus, vehicleUrl: vehicle.root.userData.asset, pedestrianBodies: crowd.bodyStyle, hfLandmarks: [...chunks.landmarks.ready] }),
+    wanted: () => incidents.wanted,
+    injured: () => crowd.injured,
+    hitNearestPedestrian: () => { const id = crowd.debugKnockNearest(player.e, player.n); if (id) { const h = crowd.injured.find((x) => x.id === id); if (h) incidents.pedestrianHit(id, h.e, h.n); } return id; },
+    police: () => incidents.vehicles.map((v) => ({ e: v.east, n: v.north, kind: v.root.userData.kind, asset: v.root.userData.assetStatus })),
     enterCar: () => { vehicle.place(player.e + 3, player.n, world.heightAt(player.e + 3, player.n)); vehicleControl(); },
     place: (e: number, n: number) => { pendingPlace = { e, n }; player.e = e; player.n = n; },
     travel: (key: string) => { const l = landmarks[key]; if (l) { pendingPlace = { e: l.east, n: l.north }; player.e = l.east; player.n = l.north; } },

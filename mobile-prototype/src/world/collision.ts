@@ -4,6 +4,8 @@ export interface Collider {
   ring: Float32Array;        // e0,n0,e1,n1,... (not closed)
   minE: number; maxE: number; minN: number; maxN: number;
   base: number; top: number; // world Y
+  /** bridge deck slab: people walk on it; cars ignore it (they drive on the deck surface instead) */
+  deck?: boolean;
 }
 
 export function makeCollider(ring: [number, number][], base: number, top: number): Collider {
@@ -71,12 +73,12 @@ export class ColliderSet {
   }
 
   /** Resolves the circle against every solid building at this height. */
-  resolve(pos: [number, number], feetY: number, headY: number, radius: number, stepUp: number, scratch: Collider[]): boolean {
+  resolve(pos: [number, number], feetY: number, headY: number, radius: number, stepUp: number, scratch: Collider[], skipDeck = false): boolean {
     let hit = false;
     for (let pass = 0; pass < 3; pass++) {
       let moved = false;
       for (const c of this.near(pos[0], pos[1], radius + 0.5, scratch)) {
-        if (feetY >= c.top - stepUp || headY <= c.base) continue;   // standing on the roof or below it
+        if (feetY >= c.top - stepUp || headY <= c.base || (skipDeck && c.deck)) continue;   // on the roof, below it, or a deck for cars
         if (pushOut(c, pos, radius)) { moved = true; hit = true; }
       }
       if (!moved) break;

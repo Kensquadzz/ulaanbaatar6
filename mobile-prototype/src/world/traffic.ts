@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { Vehicle, type VehicleWorld } from '../player/vehicle';
 import type { ChunkData, RoadData } from './types';
+import type { CarLike } from './carcollide';
 
 interface TrafficAgent {
   vehicle: Vehicle;
@@ -13,6 +14,8 @@ interface TrafficAgent {
   direction: 1 | -1;
   targetSpeed: number;
   model: TrafficModel;
+  /** seconds left standing still after a crash */
+  stunned: number;
 }
 export interface TrafficModel { url: string; native?: boolean; scale?: number; fallback?: string }
 
@@ -41,6 +44,12 @@ export class TrafficManager {
   private lastCenter = new THREE.Vector2(Infinity, Infinity);
   private lastModelIndex = 0;
   get count() { return this.agents.length; }
+  /** Live traffic vehicles, for car-to-car collision. */
+  get vehicles() { return this.agents.map((a) => a.vehicle); }
+  /** A traffic car that was hit stops for a few seconds. */
+  stun(v: Vehicle, seconds = 3) { const a = this.agents.find((x) => x.vehicle === v); if (a) a.stunned = Math.max(a.stunned, seconds); }
+  /** Bus models are heavier in collisions. */
+  massOf(v: Vehicle) { const a = this.agents.find((x) => x.vehicle === v); return a?.model.url.includes('bus') ? 4 : 1.4; }
   get modelStates() { return this.agents.map((a) => String(a.vehicle.root.userData.assetStatus ?? 'loading')); }
   get modelsReady() { return this.agents.filter((a) => a.vehicle.root.userData.assetStatus === 'loaded').length; }
 
@@ -101,7 +110,7 @@ export class TrafficManager {
       this.root.add(vehicle.root);
       this.agents.push({
         vehicle, points: [], index: 0, direction: 1,
-        targetSpeed: 4.5, model: TRAFFIC_MODELS[this.lastModelIndex++ % TRAFFIC_MODELS.length],
+        targetSpeed: 4.5, model: TRAFFIC_MODELS[this.lastModelIndex++ % TRAFFIC_MODELS.length], stunned: 0,
       });
       const agent = this.agents[this.agents.length - 1];
       void this.load(vehicle, agent.model);
@@ -127,14 +136,18 @@ export class TrafficManager {
       agent.targetSpeed = road.class === 'trunk' || road.class === 'primary' ? 6.4 + (i % 3) * 0.7 : 4.2 + (i % 2) * 0.8;
       const here = agent.points[agent.index], next = agent.points[agent.index + 1];
       agent.vehicle.heading = Math.atan2(next[0] - here[0], next[1] - here[1]);
-      agent.vehicle.place(here[0], here[1], heightAt(here[0], here[1]));
+      // a route on a bridge starts on its deck, not on the ground underneath
+      const onBridge = road.flags?.includes('is_bridge') && Vehicle.surface;
+      agent.vehicle.place(here[0], here[1], onBridge ? Vehicle.surface!(here[0], here[1], 1e9) : heightAt(here[0], here[1]));
       agent.vehicle.root.visible = true;
       agent.vehicle.root.userData.traffic = true;
     });
   }
 
-  update(dt: number, world: VehicleWorld, snow: number, rain: number) {
+  /** `obstacles`: other cars (the player's, police...) that traffic brakes for instead of driving into. */
+  update(dt: number, world: VehicleWorld, snow: number, rain: number, obstacles: CarLike[] = []) {
     for (const agent of this.agents) {
+      agent.stunned = Math.max(0, agent.stunned - dt);
       const route = agent.points;
       if (route.length < 3) continue;
       const target = route[agent.index];
@@ -151,11 +164,20 @@ export class TrafficManager {
       const steering = clamp(delta * 1.8, -1, 1);
       const braking = Math.abs(delta) > 1.3 && Math.abs(agent.vehicle.speed) > 3;
       const throttle = d < 5 ? 0.28 : 1;
+      // brake for any car (player, police, other traffic) in the lane ahead
+      const v = agent.vehicle, fe = Math.sin(v.heading), fn = Math.cos(v.heading);
+      let blocked = agent.stunned > 0;
+      for (const o of obstacles) {
+        if (o === v) continue;
+        const de = o.east - v.east, dn = o.north - v.north;
+        const along = de * fe + dn * fn, side = Math.abs(-de * fn + dn * fe);
+        if (along > 0 && along < 7 + v.halfLength + o.halfLength && side < 2.4) { blocked = true; break; }
+      }
       agent.vehicle.update(dt, {
         x: steering,
-        y: throttle * (agent.direction === 1 ? 1 : -1),
+        y: blocked ? 0 : throttle * (agent.direction === 1 ? 1 : -1),
         run: false,
-        brake: braking,
+        brake: braking || (blocked && Math.abs(v.speed) > 0.2),
       }, world, snow, rain);
     }
   }
