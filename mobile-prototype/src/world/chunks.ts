@@ -10,6 +10,7 @@ import type { Materials } from './materials';
 import { buildBuildings, buildRoads, buildTerrain, type MeshData } from './meshing';
 import { buildStreet, mergeMeshes, type Lamp } from './street';
 import { HeightField, sampleGrid } from './terrain';
+import { LandmarkModels, SQUARE_MONUMENT, SQUARE_MONUMENT_ENABLED } from './landmarks3d';
 import type { ChunkData, Manifest, Overview } from './types';
 
 interface Entry {
@@ -131,6 +132,8 @@ export class ChunkManager {
   private backdrop: Backdrop | null = null;
   triangles = 0; builtChunks = 0; lastBuildMs = 0; worstBuildMs = 0; lampCount = 0;
   private lampField: LampField;
+  /** Higgsfield landmark models drawn on the real footprints of their buildings (stylised). */
+  readonly landmarks = new LandmarkModels();
   /** True while chunks are still being fetched or built for the current position. */
   get streaming() { return this.dirty; }
 
@@ -146,6 +149,14 @@ export class ChunkManager {
     this.root.add(this.backdrop.mesh);
     this.lampField = new LampField(mats);
     this.root.add(this.lampField.group);
+    // when a landmark GLB arrives, rebuild the chunks that already drew its building as an extrusion
+    this.landmarks.onReady = () => {
+      this.entries.forEach((e) => {
+        const monument = SQUARE_MONUMENT_ENABLED && e.cx === Math.floor(SQUARE_MONUMENT.at[0] / CHUNK_M) && e.cy === Math.floor(SQUARE_MONUMENT.at[1] / CHUNK_M);
+        if (e.group && (monument || e.data?.buildings.some((b) => this.landmarks.replaces(b)))) { this.dropGroup(e); }
+      });
+      this.dirty = true;
+    };
   }
 
   setQuality(q: Quality, mats: Materials) {
@@ -233,7 +244,7 @@ export class ChunkManager {
     if (!e.group) return;
     e.group.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (!m.isMesh) return;
+      if (!m.isMesh || m.userData.shared) return;      // shared Higgsfield GLB geometry stays cached
       m.geometry.dispose();
       if (m.userData.ownMaterial) {
         const mat = m.material as THREE.MeshStandardMaterial;
@@ -273,9 +284,13 @@ export class ChunkManager {
     const street = buildStreet(d.roads, d.buildings, e.cx, e.cy, hAt, near);
     if (near) add(mergeMeshes(buildRoads(d.roads, e.cx, e.cy, hAt, true), street), this.mats.road, false, false, true, 'roads');
     e.lamps = street.lamps;
-    const b = buildBuildings(d.buildings, e.cx, e.cy, hAt, near, near ? 0 : this.q.farMinAreaM2);
+    const replaced = d.buildings.filter((x) => this.landmarks.replaces(x));
+    const drawn = replaced.length ? d.buildings.filter((x) => !replaced.includes(x)) : d.buildings;
+    const b = buildBuildings(drawn, e.cx, e.cy, hAt, near, near ? 0 : this.q.farMinAreaM2);
     add(b, this.mats.building, false, near, near, 'buildings');
-    if (near) this.colliders.set(e.key, b.colliders);
+    // replaced landmarks keep the collision of their real footprint
+    if (near) this.colliders.set(e.key, replaced.length ? b.colliders.concat(buildBuildings(replaced, e.cx, e.cy, hAt, false).colliders) : b.colliders);
+    this.landmarks.place(replaced, e.cx, e.cy, group, hAt);
     group.updateMatrixWorld(true);
     this.root.add(group);
     e.group = group; e.lod = lod; e.tris = tris;

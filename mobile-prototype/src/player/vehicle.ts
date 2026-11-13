@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { Collider } from '../world/collision';
+import { bakeVehicle } from '../world/hfassets';
 
 export interface VehicleWorld {
   heightAt(east: number, north: number): number;
@@ -86,16 +87,24 @@ export class Vehicle {
     this.place(0, 0, 0);
   }
 
-  /** Load a licensed GLB vehicle. The procedural car remains as a fallback if loading fails. */
-  async loadModel(url: string): Promise<boolean> {
+  /**
+   * Load a licensed GLB vehicle. The procedural car remains as a fallback if loading fails.
+   * By default the model is stretched to a 1.82 x 1.72 x 3.82 m sedan box (Kenney kit). With
+   * `fit.native` it keeps its own proportions and is scaled uniformly by `fit.scale` (default 1):
+   * used for the Higgsfield vehicles, which are modelled in metres.
+   */
+  async loadModel(url: string, fit: { native?: boolean; scale?: number } = {}): Promise<boolean> {
     try {
       const gltf = await this.loader.loadAsync(url);
       const model = gltf.scene;
+      if (fit.native) bakeVehicle(model);          // Higgsfield cars: 18+ meshes -> body + 4 wheels
       model.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(model);
       const size = box.getSize(new THREE.Vector3());
       if (!Number.isFinite(size.x) || size.x <= 0 || size.y <= 0 || size.z <= 0) return false;
-      const scale = new THREE.Vector3(1.82 / size.x, 1.72 / size.y, 3.82 / size.z);
+      const scale = fit.native
+        ? new THREE.Vector3().setScalar(fit.scale ?? 1)
+        : new THREE.Vector3(1.82 / size.x, 1.72 / size.y, 3.82 / size.z);
       const wrapper = new THREE.Group();
       wrapper.scale.copy(scale);
       wrapper.position.y = -box.min.y * scale.y;
@@ -105,8 +114,18 @@ export class Vehicle {
         const mesh = node as THREE.Mesh;
         if (mesh.isMesh) { mesh.castShadow = false; mesh.receiveShadow = false; }
         const name = node.name.toLowerCase();
-        if (name.includes('wheel')) this.loadedWheels.push({ node, front: name.includes('front') });
+        if (name.includes('wheel')) {
+          const front = name.includes('front');
+          // steer (Y) is applied outside the spin (X) so a turned wheel still rolls forward
+          if (front) node.rotation.order = 'YXZ';
+          this.loadedWheels.push({ node, front });
+        }
       });
+      // replacing an earlier GLB (e.g. a fallback) must not leave two bodies on the car
+      for (const old of this.root.children.filter((c) => c.userData.vehicleModel)) {
+        this.root.remove(old);
+      }
+      wrapper.userData.vehicleModel = true;
       this.root.add(wrapper);
       this.procedural.traverse((node) => {
         const mesh = node as THREE.Mesh;
@@ -132,7 +151,7 @@ export class Vehicle {
   place(east: number, north: number, y: number) {
     this.east = east; this.north = north; this.y = y; this.speed = 0;
     this.root.position.set(east, y, -north);
-    this.root.rotation.y = Math.PI + this.heading;
+    this.root.rotation.y = Math.PI - this.heading;   // +Z front; matches the character (heading is clockwise from north)
   }
 
   update(dt: number, input: DriveInput, world: VehicleWorld, snow = 0, rain = 0) {
@@ -171,7 +190,7 @@ export class Vehicle {
 
     this.y = world.heightAt(this.east, this.north);
     this.root.position.set(this.east, this.y, -this.north);
-    this.root.rotation.y = Math.PI + this.heading;
+    this.root.rotation.y = Math.PI - this.heading;   // +Z front; matches the character (heading is clockwise from north)
     this.frontWheels.forEach(w => { w.rotation.y = -steer; });
     this.wheels.forEach(w => {
       const tyre = w.children[0] as THREE.Mesh;

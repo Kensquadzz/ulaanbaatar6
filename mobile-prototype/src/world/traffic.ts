@@ -1,6 +1,7 @@
 // Ambient moving traffic follows real drivable road centerlines from the UB6 map chunks.
-// Car bodies use the bundled CC0 Kenney GLB pack; the same mobile vehicle physics is shared
-// with the player-controlled sedan.
+// Car bodies come from the owner's Higgsfield 3D Jutsu project (hybrid sedan, city car, city bus)
+// mixed with the bundled CC0 Kenney GLB pack; if a Higgsfield model fails, the Kenney model of the
+// same slot is loaded instead. The same mobile vehicle physics is shared with the player's car.
 import * as THREE from 'three';
 import { Vehicle, type VehicleWorld } from '../player/vehicle';
 import type { ChunkData, RoadData } from './types';
@@ -11,8 +12,9 @@ interface TrafficAgent {
   index: number;
   direction: 1 | -1;
   targetSpeed: number;
-  model: string;
+  model: TrafficModel;
 }
+export interface TrafficModel { url: string; native?: boolean; scale?: number; fallback?: string }
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 const wrapAngle = (x: number) => {
@@ -20,7 +22,18 @@ const wrapAngle = (x: number) => {
   while (x < -Math.PI) x += Math.PI * 2;
   return x;
 };
-const MODEL_SET = ['taxi.glb', 'suv-luxury.glb', 'delivery.glb', 'police.glb'];
+// Higgsfield city car and bus are low-poly library models built small (3.1 m / 4.7 m long): they are
+// scaled up uniformly to a believable 4.6 m car and a 6.4 m midi bus. The hybrid sedan is to scale.
+const HF = 'higgsfield/vehicles/';
+export const TRAFFIC_MODELS: TrafficModel[] = [
+  { url: HF + 'hf-city-car.glb', native: true, scale: 1.5, fallback: 'taxi.glb' },
+  { url: 'taxi.glb' },
+  { url: HF + 'hf-city-bus.glb', native: true, scale: 1.35, fallback: 'delivery.glb' },
+  { url: HF + 'hf-hybrid-sedan.glb', native: true, scale: 1, fallback: 'suv-luxury.glb' },
+  { url: 'police.glb' },
+  { url: HF + 'hf-city-car.glb', native: true, scale: 1.5, fallback: 'suv.glb' },
+];
+const MAX_AGENTS = 6;
 
 export class TrafficManager {
   readonly root = new THREE.Group();
@@ -31,6 +44,7 @@ export class TrafficManager {
   get modelStates() { return this.agents.map((a) => String(a.vehicle.root.userData.assetStatus ?? 'loading')); }
   get modelsReady() { return this.agents.filter((a) => a.vehicle.root.userData.assetStatus === 'loaded').length; }
 
+  /** `baseUrl` is the models/ folder; Kenney files live in models/vehicles/. */
   constructor(private baseUrl: string) {
     this.root.name = 'UB6 ambient city traffic';
   }
@@ -58,6 +72,12 @@ export class TrafficManager {
     return roads;
   }
 
+  private async load(vehicle: Vehicle, model: TrafficModel) {
+    const url = (model.url.startsWith('higgsfield/') ? this.baseUrl : this.baseUrl + 'vehicles/') + model.url;
+    const ok = await vehicle.loadModel(url, { native: model.native, scale: model.scale });
+    if (!ok && model.fallback) await vehicle.loadModel(this.baseUrl + 'vehicles/' + model.fallback);
+  }
+
   rebuild(chunks: ChunkData[], east: number, north: number, heightAt: (e: number, n: number) => number) {
     if (Math.hypot(east - this.lastCenter.x, north - this.lastCenter.y) < 110 && this.agents.length) return;
     this.lastCenter.set(east, north);
@@ -70,21 +90,21 @@ export class TrafficManager {
         return Math.hypot(p[0] - mid[0], p[1] - mid[1]) < 38;
       })) continue;
       chosen.push(road);
-      if (chosen.length === 4) break;
+      if (chosen.length === MAX_AGENTS) break;
     }
 
     // Reuse old vehicle objects and swap their route/model assignment instead of duplicating
     // static city geometry whenever the player crosses a chunk boundary.
-    const wanted = Math.min(4, chosen.length);
+    const wanted = Math.min(MAX_AGENTS, chosen.length);
     while (this.agents.length < wanted) {
       const vehicle = new Vehicle();
       this.root.add(vehicle.root);
       this.agents.push({
         vehicle, points: [], index: 0, direction: 1,
-        targetSpeed: 4.5, model: MODEL_SET[this.lastModelIndex++ % MODEL_SET.length],
+        targetSpeed: 4.5, model: TRAFFIC_MODELS[this.lastModelIndex++ % TRAFFIC_MODELS.length],
       });
       const agent = this.agents[this.agents.length - 1];
-      void vehicle.loadModel(this.baseUrl + agent.model);
+      void this.load(vehicle, agent.model);
     }
     while (this.agents.length > wanted) {
       const agent = this.agents.pop()!;

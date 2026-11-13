@@ -1,8 +1,11 @@
 # Asset production tracker
 
-Every art asset moves through the same gates. Higgsfield output is **reference only**: it
-is never imported as a game asset and never decides where a road or building is (the map
-data does).
+Every art asset moves through the same gates. Higgsfield output never decides where a road or
+building is (the map data does).
+
+Update 2026-11-13 (owner's request): 3D models from the owner's Higgsfield 3D Jutsu project ARE now
+imported into the iPhone prototype as runtime assets. See `higgsfield/README.md` for what is used,
+what is stylised, and the licence question that must be settled before a store release.
 
     reference -> model -> blender_cleanup -> uv_pbr -> rig -> ue_import -> optimised -> qa_passed
 

@@ -1,0 +1,258 @@
+{
+  "source": "Higgsfield 3D Jutsu project f4c92c39-70f4-49bd-9f43-19fd49db7cdf, revision 12 (GLB etag 0de6d6b12bbcfdfdf855c433b49ab418)",
+  "note": "Extracted by scripts/extract-higgsfield.mjs. Landmark *-study files are stylised and are not the real buildings.",
+  "assets": [
+    {
+      "file": "vehicles/hf-hybrid-sedan.glb",
+      "shipped": true,
+      "size_m": [
+        2.34,
+        1.9,
+        4.56
+      ],
+      "triangles": 5832,
+      "primitives": 18,
+      "bytes": 229316
+    },
+    {
+      "file": "vehicles/hf-city-car.glb",
+      "shipped": true,
+      "size_m": [
+        1.2,
+        0.96,
+        3.06
+      ],
+      "triangles": 2264,
+      "primitives": 1,
+      "bytes": 51920
+    },
+    {
+      "file": "vehicles/hf-city-bus.glb",
+      "shipped": true,
+      "size_m": [
+        1.91,
+        1.91,
+        4.69
+      ],
+      "triangles": 4179,
+      "primitives": 1,
+      "bytes": 104088
+    },
+    {
+      "file": "characters/hf-player-winter.glb",
+      "shipped": true,
+      "size_m": [
+        0.97,
+        1.99,
+        0.5
+      ],
+      "triangles": 1732,
+      "primitives": 13,
+      "bytes": 31976
+    },
+    {
+      "file": "characters/hf-woman-winter.glb",
+      "shipped": true,
+      "size_m": [
+        0.91,
+        1.87,
+        0.47
+      ],
+      "triangles": 1740,
+      "primitives": 13,
+      "bytes": 31924
+    },
+    {
+      "file": "props/hf-traffic-light.glb",
+      "shipped": false,
+      "size_m": [
+        2.01,
+        4.3,
+        1.34
+      ],
+      "triangles": 3424,
+      "primitives": 1,
+      "bytes": 235792
+    },
+    {
+      "file": "props/hf-street-lamp.glb",
+      "shipped": false,
+      "size_m": [
+        1.78,
+        4.1,
+        0.71
+      ],
+      "triangles": 2296,
+      "primitives": 1,
+      "bytes": 159000
+    },
+    {
+      "file": "props/hf-bus-shelter.glb",
+      "shipped": false,
+      "size_m": [
+        4.91,
+        3.35,
+        1.91
+      ],
+      "triangles": 6098,
+      "primitives": 1,
+      "bytes": 477016
+    },
+    {
+      "file": "props/hf-street-tree.glb",
+      "shipped": false,
+      "size_m": [
+        1.7,
+        3.7,
+        1.36
+      ],
+      "triangles": 48,
+      "primitives": 2,
+      "bytes": 5592
+    },
+    {
+      "file": "props/hf-snow-drift.glb",
+      "shipped": false,
+      "size_m": [
+        2.6,
+        0.48,
+        1.1
+      ],
+      "triangles": 224,
+      "primitives": 1,
+      "bytes": 6804
+    },
+    {
+      "file": "props/hf-ger.glb",
+      "shipped": false,
+      "size_m": [
+        6.8,
+        4.3,
+        6.8
+      ],
+      "triangles": 196,
+      "primitives": 2,
+      "bytes": 11356
+    },
+    {
+      "file": "props/hf-horse.glb",
+      "shipped": false,
+      "size_m": [
+        0.68,
+        1.9,
+        2.94
+      ],
+      "triangles": 876,
+      "primitives": 1,
+      "bytes": 88856
+    },
+    {
+      "file": "buildings/hf-apartment-block.glb",
+      "shipped": false,
+      "size_m": [
+        16.02,
+        15.42,
+        14.26
+      ],
+      "triangles": 34738,
+      "primitives": 1,
+      "bytes": 2920708
+    },
+    {
+      "file": "buildings/hf-apartment-tower.glb",
+      "shipped": false,
+      "size_m": [
+        16.29,
+        18.99,
+        15.14
+      ],
+      "triangles": 22626,
+      "primitives": 1,
+      "bytes": 1753148
+    },
+    {
+      "file": "buildings/hf-glass-tower.glb",
+      "shipped": false,
+      "size_m": [
+        14.7,
+        38.79,
+        14.7
+      ],
+      "triangles": 2724,
+      "primitives": 1,
+      "bytes": 206900
+    },
+    {
+      "file": "landmarks/hf-government-palace-study.glb",
+      "shipped": true,
+      "size_m": [
+        62,
+        15.5,
+        19.8
+      ],
+      "triangles": 16584,
+      "primitives": 5,
+      "bytes": 395772
+    },
+    {
+      "file": "landmarks/hf-state-department-store-study.glb",
+      "shipped": true,
+      "size_m": [
+        28,
+        8,
+        17.88
+      ],
+      "triangles": 21080,
+      "primitives": 7,
+      "bytes": 484256
+    },
+    {
+      "file": "landmarks/hf-shangri-la-study.glb",
+      "shipped": true,
+      "size_m": [
+        27,
+        30,
+        20.37
+      ],
+      "triangles": 14780,
+      "primitives": 6,
+      "bytes": 328744
+    },
+    {
+      "file": "landmarks/hf-blue-sky-tower-study.glb",
+      "shipped": true,
+      "size_m": [
+        15.01,
+        20.5,
+        15.24
+      ],
+      "triangles": 444,
+      "primitives": 3,
+      "bytes": 22492
+    },
+    {
+      "file": "landmarks/hf-sukhbaatar-monument-study.glb",
+      "shipped": false,
+      "size_m": [
+        8,
+        4.8,
+        8
+      ],
+      "triangles": 152,
+      "primitives": 2,
+      "bytes": 8064
+    },
+    {
+      "file": "landmarks/hf-zaisan-memorial-study.glb",
+      "shipped": true,
+      "size_m": [
+        18,
+        5.45,
+        12
+      ],
+      "triangles": 232,
+      "primitives": 2,
+      "bytes": 11148
+    }
+  ]
+}

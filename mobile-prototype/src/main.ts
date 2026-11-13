@@ -136,11 +136,15 @@ async function boot() {
   character.root.userData.kind = 'character';
   scene.add(character.root);
   const vehicle = new Vehicle();
-  void vehicle.loadModel(import.meta.env.BASE_URL + 'models/vehicles/sedan.glb');
+  // Player car: the hybrid sedan from the Higgsfield 3D Jutsu project (to scale, wheels spin and
+  // steer); the Kenney CC0 sedan, then the procedural car, remain as fallbacks.
+  void vehicle.loadModel(import.meta.env.BASE_URL + 'models/higgsfield/vehicles/hf-hybrid-sedan.glb', { native: true })
+    .then((ok) => ok || vehicle.loadModel(import.meta.env.BASE_URL + 'models/vehicles/sedan.glb'));
   scene.add(vehicle.root);
   const crowd = new CrowdManager();
   scene.add(crowd.root);
-  const traffic = new TrafficManager(import.meta.env.BASE_URL + 'models/vehicles/');
+  void crowd.useHiggsfield(QUALITY[qName].pbr);
+  const traffic = new TrafficManager(import.meta.env.BASE_URL + 'models/');
   scene.add(traffic.root);
   const player = new Player();
   player.e = SPAWN.east; player.n = SPAWN.north; player.heading = Math.PI;
@@ -405,7 +409,8 @@ async function boot() {
   noteQuality();
   // small hook for automated tests and performance captures (scripts/perf.mjs)
   (window as any).__ub6 = {
-    stats: () => ({ ...stats, e: player.e, n: player.n, y: player.y, speed: player.speed, grounded: player.grounded, yaw: follow.yaw, near: chunks.nearProgress(), colliders: chunks.colliders.count, pending: !!pendingPlace, streaming: chunks.streaming, worstBuildMs: chunks.worstBuildMs, inVehicle, vehicleSpeed: vehicle.speed, vehicleEast: vehicle.east, vehicleNorth: vehicle.north, input: lastInput, pedestrians: crowd.count, traffic: traffic.count, trafficModelsReady: traffic.modelsReady, trafficModelStates: traffic.modelStates, vehicleAsset: vehicle.root.userData.assetStatus }),
+    stats: () => ({ ...stats, e: player.e, n: player.n, y: player.y, speed: player.speed, grounded: player.grounded, yaw: follow.yaw, near: chunks.nearProgress(), colliders: chunks.colliders.count, pending: !!pendingPlace, streaming: chunks.streaming, worstBuildMs: chunks.worstBuildMs, inVehicle, vehicleSpeed: vehicle.speed, vehicleEast: vehicle.east, vehicleNorth: vehicle.north, input: lastInput, pedestrians: crowd.count, traffic: traffic.count, trafficModelsReady: traffic.modelsReady, trafficModelStates: traffic.modelStates, vehicleAsset: vehicle.root.userData.assetStatus, vehicleUrl: vehicle.root.userData.asset, pedestrianBodies: crowd.bodyStyle, hfLandmarks: [...chunks.landmarks.ready] }),
+    enterCar: () => { vehicle.place(player.e + 3, player.n, world.heightAt(player.e + 3, player.n)); vehicleControl(); },
     place: (e: number, n: number) => { pendingPlace = { e, n }; player.e = e; player.n = n; },
     travel: (key: string) => { const l = landmarks[key]; if (l) { pendingPlace = { e: l.east, n: l.north }; player.e = l.east; player.n = l.north; } },
     setTime: (hour: number | null) => { timeLive = hour === null; if (hour !== null) freeHour = hour; hudTimer = 0; },
@@ -416,6 +421,7 @@ async function boot() {
     face: (h: number) => { player.heading = h; },
     weather: () => weather.state,
     audit: () => auditScene(scene, camera, renderer),
+    scene: () => scene,
   };
   requestAnimationFrame(frame);
 }

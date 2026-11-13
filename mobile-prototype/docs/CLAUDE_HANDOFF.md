@@ -89,3 +89,19 @@ Do not scrape Google Street View or use Google Maps imagery as permanent game te
 
 ## Expected delivery
 Return updated source and ZIP, verified Vercel preview URL, actual gameplay screenshots/video, test report, asset licence inventory, known issues and remaining release blockers. If signing credentials/accounts are unavailable, provide build-ready source and exact owner steps; do not claim upload completed.
+
+## Update 2026-11-13: Higgsfield 3D assets integrated (branch claude/project-thread-7vm9zh)
+- Scene GLB revision 12 and both renders downloaded (read-only, no credits) to assets/higgsfield/.
+  The two cloudfront State Department Store images return HTTP 403 and were not obtained.
+- scripts/extract-higgsfield.mjs splits the scene into 21 GLBs: 10 shipped in public/models/higgsfield/,
+  11 kept in assets/higgsfield/library/ (not loaded yet).
+- In game: Higgsfield hybrid sedan is the player car (Kenney sedan, then procedural, as fallbacks);
+  traffic is 6 cars (Higgsfield city car x2, bus, hybrid sedan + Kenney taxi, police);
+  all 18 pedestrians use the two Higgsfield winter people (rigid limbs swinging);
+  5 landmark studies replace the extruded footprints of their buildings, labelled stylised.
+- Fixed: every vehicle model was drawn mirrored (front pointing backwards on east/west headings);
+  rotation is now PI - heading, with a unit test.
+- QA (cloud headless Chromium, SwiftShader, NOT a phone): 36 unit tests pass; tsc and vite build clean;
+  no 404s or page errors; draw calls at Peace Avenue HIGH 86 / MEDIUM 80 / LOW 53
+  (before: 77 / 73 / 52); triangles HIGH 172k / MEDIUM 143k / LOW 115k (before: 133k / 106k / 81k).
+- Still not tested on a physical iPhone/Android. Player character is still procedural.
