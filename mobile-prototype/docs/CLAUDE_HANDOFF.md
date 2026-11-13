@@ -142,3 +142,9 @@ Done (original rules, UI and code; no assets or names from other games):
 - Monument: `src/world/monument.ts` is a STYLISED Sukhbaatar statue (Higgsfield horse plus a hand-built rider on a granite pedestal) at the real square centre. Its facing direction (west) is an estimate until checked against photos.
 - Government Palace and State Department Store remodel waits on reference photos from Kenzz (the cloud proxy blocks image downloads).
 - Bus stops are still not added: no real data source is reachable.
+
+## Square V5 (2026-11-13): palace, store and statue modelled from the owner's photos
+
+- `src/world/palace.ts`, `src/world/deptstore.ts`: hand-modelled from Kenzz's reference photos and placed on the real footprint rectangle (`PROCEDURAL_LANDMARKS` in landmarks3d.ts). The Higgsfield studies of these two are kept as `HF_STUDIES_REPLACED`. Heights, column counts, depths, rear sides and the store sign are ESTIMATES.
+- `src/world/monument.ts`: rearing horse facing EAST (from the photos), rough rock on a red granite base, relief on the south face, 12 stone lions with chains, flower beds. Sizes are estimates. The lion ring is the collider.
+- `src/world/proc.ts`: helpers (one mesh per material via `bakeByMaterial`, canvas textures, night glow list).

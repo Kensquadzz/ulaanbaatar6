@@ -11,6 +11,10 @@
 import * as THREE from 'three';
 import { CHUNK_M, ORIGIN_GROUND_M } from '../core/geo';
 import { loadHf } from './hfassets';
+import { buildGovernmentPalace } from './palace';
+import { buildStateDepartmentStore } from './deptstore';
+import { loadHorse, MONUMENT_GLOW } from './monument';
+import { PROC_GLOW } from './proc';
 import { buildingLook, groundRange, ringArea } from './meshing';
 import type { BuildingData } from './types';
 
@@ -28,12 +32,30 @@ export interface LandmarkModel {
 // Ids from data/tiles/chunks (Overture buildings). Where a landmark has several records (Blue Sky
 // podium, the second Shangri-La block) only the tower record named here is replaced.
 export const LANDMARK_MODELS: LandmarkModel[] = [
-  { id: 'a83f3ea0', file: 'landmarks/hf-government-palace-study.glb', label: 'Засгийн газрын ордон (стилизац)', faces: [3.6, -6.9] },
-  { id: '3e9c49ca', file: 'landmarks/hf-state-department-store-study.glb', label: 'Улсын их дэлгүүр (стилизац)', faces: [-845, -300] },
   { id: '04fab6dd', file: 'landmarks/hf-blue-sky-tower-study.glb', label: 'Блю скай товер (стилизац)', faces: [3.6, -6.9] },
   { id: '8a90698c', file: 'landmarks/hf-shangri-la-study.glb', label: 'Shangri-La (стилизац)', faces: [312, -560] },
   { id: '04fdf871', file: 'landmarks/hf-zaisan-memorial-study.glb', label: 'Зайсан толгой (стилизац)', faces: [-135.7, -3574] },
 ];
+/**
+ * The Higgsfield studies of the Government Palace and the State Department Store, replaced on
+ * 2026-11-13 by the hand-modelled versions below (owner: "must look like the photos"). The GLBs stay
+ * in public/models/higgsfield/landmarks and can be switched back by moving an entry into LANDMARK_MODELS.
+ */
+export const HF_STUDIES_REPLACED: LandmarkModel[] = [
+  { id: 'a83f3ea0', file: 'landmarks/hf-government-palace-study.glb', label: 'Засгийн газрын ордон (стилизац)', faces: [3.6, -6.9] },
+  { id: '3e9c49ca', file: 'landmarks/hf-state-department-store-study.glb', label: 'Улсын их дэлгүүр (стилизац)', faces: [-845, -300] },
+];
+
+/**
+ * Landmarks modelled by hand from the owner's reference photos (see palace.ts, deptstore.ts for what is
+ * real and what is estimated). Built on the real footprint rectangle, front toward `faces`.
+ */
+export interface ProceduralLandmark { id: string; label: string; faces: [number, number]; build: (w: number, d: number, horse: THREE.BufferGeometry | null) => THREE.Group }
+export const PROCEDURAL_LANDMARKS: ProceduralLandmark[] = [
+  { id: 'a83f3ea0', label: 'Засгийн газрын ордон (зургаас загварчилсан)', faces: [3.6, -6.9], build: buildGovernmentPalace },
+  { id: '3e9c49ca', label: 'Улсын их дэлгүүр (зургаас загварчилсан)', faces: [-845, -300], build: (w, d) => buildStateDepartmentStore(w, d) },
+];
+
 /**
  * Stylised Sukhbaatar monument study. NOT placed: it is a plain plinth with a cylinder, it would read as
  * a grey box, it has no footprint in the data, and the square centre is the player's spawn point.
@@ -43,6 +65,7 @@ export const SQUARE_MONUMENT_ENABLED = false;
 export const SQUARE_MONUMENT = { file: 'landmarks/hf-sukhbaatar-monument-study.glb', at: [3.63, -6.9] as [number, number], faces: [3.6, 60] as [number, number] };
 
 const byPrefix = (id: string) => LANDMARK_MODELS.find((m) => id.startsWith(m.id));
+const procByPrefix = (id: string) => PROCEDURAL_LANDMARKS.find((m) => id.startsWith(m.id));
 
 /** Minimum-area enclosing rectangle of a ring: centre, unit axis u, half extents along u and v. */
 export function footprintRect(ring: [number, number][]) {
@@ -79,6 +102,15 @@ function convexHull(pts: [number, number][]): [number, number][] {
  * footprint rectangle, with its front on the rectangle side that faces `faces`.
  */
 export function fitTransform(rect: ReturnType<typeof footprintRect>, model: THREE.Vector3, faces: [number, number], y0: number, y1: number) {
+  const c = frontSide(rect, faces);
+  const scale = new THREE.Vector3((c.width * 2) / model.x, Math.max(0.5, y1 - y0) / model.y, (c.depth * 2) / model.z);
+  // three.js: x = east, z = -north. Model +Z must point along (fe, -fn) in xz.
+  const yaw = Math.atan2(c.fe, -c.fn);
+  return { position: new THREE.Vector3(rect.ce, y0, -rect.cn), yaw, scale };
+}
+
+/** The side of a footprint rectangle that points most toward `faces`: unit normal, half depth and half width. */
+export function frontSide(rect: ReturnType<typeof footprintRect>, faces: [number, number]) {
   // candidate fronts: +u, -u, +v, -v; pick the one pointing most toward `faces`
   const de = faces[0] - rect.ce, dn = faces[1] - rect.cn;
   const ve = -rect.un, vn = rect.ue;
@@ -88,11 +120,7 @@ export function fitTransform(rect: ReturnType<typeof footprintRect>, model: THRE
     { fe: ve, fn: vn, depth: rect.hv, width: rect.hu },
     { fe: -ve, fn: -vn, depth: rect.hv, width: rect.hu },
   ];
-  const c = cands.reduce((a, b) => (b.fe * de + b.fn * dn > a.fe * de + a.fn * dn ? b : a));
-  const scale = new THREE.Vector3((c.width * 2) / model.x, Math.max(0.5, y1 - y0) / model.y, (c.depth * 2) / model.z);
-  // three.js: x = east, z = -north. Model +Z must point along (fe, -fn) in xz.
-  const yaw = Math.atan2(c.fe, -c.fn);
-  return { position: new THREE.Vector3(rect.ce, y0, -rect.cn), yaw, scale };
+  return cands.reduce((a, b) => (b.fe * de + b.fn * dn > a.fe * de + a.fn * dn ? b : a));
 }
 
 const shared = (root: THREE.Object3D) => root.traverse((o) => { o.userData.shared = true; });
@@ -104,11 +132,19 @@ export class LandmarkModels {
   private sizes = new Map<string, THREE.Vector3>();
   onReady: () => void = () => {};
   /** window / sign materials of the landmark models that light up after dusk */
-  private glowing: THREE.MeshStandardMaterial[] = [];
+  private glowing: THREE.MeshStandardMaterial[] = [...PROC_GLOW, ...MONUMENT_GLOW];
+  /** hand-modelled landmarks, built once per building id */
+  private built = new Map<string, THREE.Group>();
+  private horse: THREE.BufferGeometry | null = null;
 
-  setNight(n: number) { for (const m of this.glowing) m.emissiveIntensity = (m.userData.glow as number) * (0.03 + n); }
+  setNight(n: number) {
+    for (const m of PROC_GLOW) if (!this.glowing.includes(m)) this.glowing.push(m);
+    for (const m of this.glowing) m.emissiveIntensity = (m.userData.glow as number) * (0.03 + n);
+  }
 
   constructor() {
+    // hand-modelled landmarks are ready once the horse (for the palace's mounted statues) has loaded
+    void loadHorse().then((h) => { this.horse = h; for (const p of PROCEDURAL_LANDMARKS) this.ready.add(p.id); this.onReady(); });
     for (const m of [...LANDMARK_MODELS.map((l) => l.file), ...(SQUARE_MONUMENT_ENABLED ? [SQUARE_MONUMENT.file] : [])]) {
       loadHf(m).then((scene) => {
         scene.traverse((o) => {
@@ -132,7 +168,7 @@ export class LandmarkModels {
   }
 
   /** True when this building should be drawn by `place` instead of the extruder. */
-  replaces(b: BuildingData) { const m = byPrefix(b.id); return !!m && this.ready.has(m.id); }
+  replaces(b: BuildingData) { const m = byPrefix(b.id) ?? procByPrefix(b.id); return !!m && this.ready.has(m.id); }
 
   /** Adds the models for this chunk's replaced buildings (and the square monument) to `group`. */
   place(buildings: BuildingData[], cx: number, cy: number, group: THREE.Group, hAt: HeightFn) {
@@ -149,6 +185,21 @@ export class LandmarkModels {
       group.add(m);
     };
     for (const b of buildings) {
+      const pl = procByPrefix(b.id);
+      if (pl && this.ready.has(pl.id)) {
+        const ring = b.rings[0]; if (!ring || ring.length < 3) continue;
+        const rect = footprintRect(ring), c = frontSide(rect, pl.faces);
+        let model = this.built.get(b.id);
+        if (!model) { model = pl.build(c.width * 2, c.depth * 2, this.horse); shared(model); this.built.set(b.id, model); }
+        const fe = rect.ce + c.fe * c.depth, fn = rect.cn + c.fn * c.depth;   // centre of the front side
+        const m = model.clone(true);
+        m.name = pl.label; m.userData.kind = 'hand-modelled landmark (from photos)';
+        m.position.set(fe - e0, hAt(fe, fn) - 0.02, -fn + n0);
+        m.rotation.y = Math.atan2(c.fe, -c.fn);
+        m.updateMatrix(); m.updateMatrixWorld(true);
+        group.add(m);
+        continue;
+      }
       const l = byPrefix(b.id);
       if (!l || !this.ready.has(l.id)) continue;
       const ring = b.rings[0]; if (!ring || ring.length < 3) continue;

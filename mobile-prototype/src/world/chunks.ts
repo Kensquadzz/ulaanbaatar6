@@ -326,15 +326,16 @@ export class ChunkManager {
     this.landmarks.place(replaced, e.cx, e.cy, group, hAt);
     const [me, mn] = SQUARE_MONUMENT.at;
     if (this.monument && Math.floor(me / CHUNK_M) === e.cx && Math.floor(mn / CHUNK_M) === e.cy) {
-      // statue faces west (direction ESTIMATED, see monument.ts); +Z front turned by -90 degrees
+      // the horse faces EAST (owner's reference photos, 2026-11-13); +Z front turned by +90 degrees
       const y = hAt(me, mn) - 0.05;
       this.monument.position.set(me - e0, y, -(mn - n0));
-      this.monument.rotation.y = -Math.PI / 2;
+      this.monument.rotation.y = Math.PI / 2;
       group.add(this.monument);
       if (near) {
-        const hx = MONUMENT_HALF.z + 0.8, hz = MONUMENT_HALF.x + 0.8;   // rotated: long side runs east-west
-        this.colliders.set(e.key, [...this.colliders.get(e.key),
-          makeCollider([[me - hx, mn - hz], [me + hx, mn - hz], [me + hx, mn + hz], [me - hx, mn + hz]], y - 1, y + PEDESTAL_H + 4)]);
+        // the ring of stone lions and chains is the barrier (square, so the turn does not matter)
+        const hx = MONUMENT_HALF.z + 0.6, hz = MONUMENT_HALF.x + 0.6;
+        this.colliders.set(e.key, [...this.colliders.get(e.key)!,
+          makeCollider([[me - hx, mn - hz], [me + hx, mn - hz], [me + hx, mn + hz], [me - hx, mn + hz]], y - 1, y + PEDESTAL_H + 6)]);
       }
     }
     group.updateMatrixWorld(true);
