@@ -54,6 +54,7 @@ export function pushOut(c: Collider, pos: [number, number], radius: number): boo
 export class ColliderSet {
   private byChunk = new Map<string, Collider[]>();
   set(key: string, list: Collider[]) { this.byChunk.set(key, list); }
+  get(key: string): Collider[] { return this.byChunk.get(key) ?? []; }
   delete(key: string) { this.byChunk.delete(key); }
   get count() { let c = 0; this.byChunk.forEach((l) => (c += l.length)); return c; }
 

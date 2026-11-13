@@ -156,9 +156,9 @@ async function boot() {
   const traffic = new TrafficManager(import.meta.env.BASE_URL + 'models/');
   scene.add(traffic.root);
   const player = new Player();
-  player.e = SPAWN.east; player.n = SPAWN.north; player.heading = Math.PI;
+  player.e = SPAWN.east; player.n = SPAWN.north; player.heading = 0;
   const follow = new FollowCamera(camera);
-  follow.yaw = Math.PI;                         // start looking south, toward Peace Avenue and Zaisan
+  follow.yaw = 0;                               // start looking north: Sukhbaatar statue and the Government Palace
   const input = new Input($('touch'), $('stick'), $('knob'), $('btnJump'), $('btnRun'), $('btnBrake'));
   input.hold($('btnGas'), 'gas'); input.hold($('btnBoost'), 'boost'); input.hold($('btnHand'), 'hand'); input.hold($('btnBrake'), 'brake');
   // ---- incidents: injured pedestrians, ambulance, police wanted level ----
@@ -189,7 +189,7 @@ async function boot() {
   };
 
   // First drivable city sedan is parked beside the Sukhbaatar Square spawn.
-  vehicle.place(SPAWN.east + 5.5, SPAWN.north - 4.5, world.heightAt(SPAWN.east + 5.5, SPAWN.north - 4.5));
+  vehicle.place(SPAWN.east + 6.5, SPAWN.north - 4.5, world.heightAt(SPAWN.east + 6.5, SPAWN.north - 4.5));
   const carButton = $('btnCar') as HTMLButtonElement;
   const syncVehicleHud = () => {
     const nearCar = Math.hypot(vehicle.east - player.e, vehicle.north - player.n) < 7.5;

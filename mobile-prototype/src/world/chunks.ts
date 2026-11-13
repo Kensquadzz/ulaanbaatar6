@@ -14,6 +14,8 @@ import { StreetTrees } from './trees';
 import { LandmarkModels, SQUARE_MONUMENT, SQUARE_MONUMENT_ENABLED } from './landmarks3d';
 import type { ChunkData, Manifest, Overview } from './types';
 import { Bridges, type Bridge } from './bridges';
+import { buildSukhbaatarMonument, MONUMENT_HALF, PEDESTAL_H } from './monument';
+import { makeCollider } from './collision';
 
 interface Entry {
   cx: number; cy: number; key: string;
@@ -147,6 +149,8 @@ export class ChunkManager {
     this.entries.forEach((e) => { if (e.group) this.dropGroup(e); });
     this.dirty = true;
   }
+  /** Sukhbaatar statue (stylised), placed at the centre of the square once built */
+  private monument: THREE.Group | null = null;
   /** Height to stand or drive on (bridge deck or terrain), given the previous height. */
   surfaceAt(e: number, n: number, prevY: number) { return this.bridges.surface(e, n, prevY, this.height.heightAt(e, n)); }
   /** True while chunks are still being fetched or built for the current position. */
@@ -165,6 +169,13 @@ export class ChunkManager {
     this.lampField = new LampField(mats);
     this.root.add(this.lampField.group);
     this.root.add(this.trees.root);
+    void buildSukhbaatarMonument().then((m) => {
+      m.traverse((o) => { o.userData.shared = true; });
+      this.monument = m;
+      const [me, mn] = SQUARE_MONUMENT.at;
+      const e = this.entries.get(Math.floor(me / CHUNK_M) + ',' + Math.floor(mn / CHUNK_M));
+      if (e?.group) { this.dropGroup(e); this.dirty = true; }
+    });
     // when a landmark GLB arrives, rebuild the chunks that already drew its building as an extrusion
     this.landmarks.onReady = () => {
       this.entries.forEach((e) => {
@@ -313,6 +324,19 @@ export class ChunkManager {
     // replaced landmarks keep the collision of their real footprint
     if (near) this.colliders.set(e.key, (replaced.length ? b.colliders.concat(buildBuildings(replaced, e.cx, e.cy, hAt, false).colliders) : b.colliders).concat(br.colliders));
     this.landmarks.place(replaced, e.cx, e.cy, group, hAt);
+    const [me, mn] = SQUARE_MONUMENT.at;
+    if (this.monument && Math.floor(me / CHUNK_M) === e.cx && Math.floor(mn / CHUNK_M) === e.cy) {
+      // statue faces west (direction ESTIMATED, see monument.ts); +Z front turned by -90 degrees
+      const y = hAt(me, mn) - 0.05;
+      this.monument.position.set(me - e0, y, -(mn - n0));
+      this.monument.rotation.y = -Math.PI / 2;
+      group.add(this.monument);
+      if (near) {
+        const hx = MONUMENT_HALF.z + 0.8, hz = MONUMENT_HALF.x + 0.8;   // rotated: long side runs east-west
+        this.colliders.set(e.key, [...this.colliders.get(e.key),
+          makeCollider([[me - hx, mn - hz], [me + hx, mn - hz], [me + hx, mn + hz], [me - hx, mn + hz]], y - 1, y + PEDESTAL_H + 4)]);
+      }
+    }
     group.updateMatrixWorld(true);
     this.root.add(group);
     e.group = group; e.lod = lod; e.tris = tris;

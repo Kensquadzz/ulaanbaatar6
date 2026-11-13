@@ -21,4 +21,5 @@ export const QUALITY: Record<QualityName, Quality> = {
 export const TARGET_FPS = 30;
 /** Frame-rate cap choices. 30 is the default on phones: half the GPU work of 60, so far less heat. */
 export type FpsCap = 30 | 60;
-export const SPAWN = { east: 3.63, north: -6.9 };   // Sukhbaatar Square, from data/tiles/landmarks.json
+// Sukhbaatar Square (centre from data/tiles/landmarks.json); the player starts 30 m south of the statue
+export const SPAWN = { east: 3.63, north: -36.9 };

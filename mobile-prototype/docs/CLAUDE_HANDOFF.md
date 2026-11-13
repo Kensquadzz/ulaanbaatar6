@@ -135,3 +135,10 @@ Done (original rules, UI and code; no assets or names from other games):
   and people pass underneath.
 - Bus stops: NOT added. Overture places has no bus-stop data and the OSM Overpass host is blocked
   from the cloud machine, so there is no real source; nothing was invented.
+
+## Square V4 (2026-11-13): flat plazas and Sukhbaatar statue
+
+- Terrain: `pipeline/ub6pipeline/smooth_terrain.py` filters the DEM surface model (Gaussian sigma 24 m, each sample changed at most 4 m) and fits a least-squares plane to every pedestrian plaza over 1500 m² (19 plazas, Sukhbaatar Square included). The raw heights are kept as `height_grid_raw_dm`; the manifest records `terrain_filter`.
+- Monument: `src/world/monument.ts` is a STYLISED Sukhbaatar statue (Higgsfield horse plus a hand-built rider on a granite pedestal) at the real square centre. Its facing direction (west) is an estimate until checked against photos.
+- Government Palace and State Department Store remodel waits on reference photos from Kenzz (the cloud proxy blocks image downloads).
+- Bus stops are still not added: no real data source is reachable.

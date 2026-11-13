@@ -39,7 +39,7 @@ const ASSETS = [
   { file: 'props/hf-street-tree.glb', roots: ['UB6_STREET_TREE_CROWN', 'UB6_STREET_TREE_TRUNK'], exact: true, kind: 'static' },
   { file: 'props/hf-snow-drift.glb', roots: ['WINTER_SNOW_DRIFT'], exact: true, kind: 'static', library: true },
   { file: 'props/hf-ger.glb', roots: ['GER_BODY', 'GER_ROOF', 'GER_DOOR'], exact: true, kind: 'static', library: true },
-  { file: 'props/hf-horse.glb', roots: ['UB6_MONGOLIAN_HORSE_BASE'], kind: 'static', library: true },
+  { file: 'props/hf-horse.glb', roots: ['UB6_MONGOLIAN_HORSE_BASE'], kind: 'static' },   // used for the Sukhbaatar statue
   { file: 'buildings/hf-apartment-block.glb', roots: ['UB6_APARTMENT_BLOCK_01'], kind: 'static', library: true },
   { file: 'buildings/hf-apartment-tower.glb', roots: ['UB6_APARTMENT_TOWER_01'], kind: 'static', library: true },
   { file: 'buildings/hf-glass-tower.glb', roots: ['UB6_GLASS_TOWER_01'], kind: 'static', library: true },
