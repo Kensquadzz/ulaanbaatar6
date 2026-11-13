@@ -142,9 +142,9 @@ export class SkySystem {
     const direct = smooth(-1, 12, el) * (1 - 0.8 * w.cloud) * (1 - 0.6 * w.fog);
     // After dusk the same light becomes a dim, shadowless night key so facades are not flat silhouettes.
     const nightKey = this.night * 0.9 * (1 - 0.4 * w.cloud);
-    const useNight = nightKey > 3.2 * direct;
+    const useNight = nightKey > 3.9 * direct;
     this.sun.color.copy(useNight ? NIGHT_KEY : u.uSunColor.value);
-    this.sun.intensity = useNight ? nightKey : 3.2 * direct;
+    this.sun.intensity = useNight ? nightKey : 3.9 * direct;   // Visual V2: stronger sun, softer fill = more contrast
     this.sun.visible = this.sun.intensity > 0.01;
     this.sun.castShadow = this.shadowMap > 0 && !useNight && direct > 0.05;
     const dir = useNight ? NIGHT_DIR : el > 1 ? this.sunDir : LOW_SUN.set(this.sunDir.x, 0.02, this.sunDir.z).normalize();
@@ -155,7 +155,7 @@ export class SkySystem {
     this.hemi.color.copy(u.uZenith.value).lerp(u.uHorizon.value, 0.5);
     this.hemi.groundColor.setRGB(0.4, 0.37, 0.32).multiplyScalar(0.3 + 0.7 * this.daylight).lerp(NIGHT_FILL, 0.35 * this.night);
     // never pitch black: a cool fill keeps the city readable at night
-    this.hemi.intensity = 1.0 + 1.5 * this.daylight + 0.5 * w.cloud * this.daylight + 0.75 * this.night;
+    this.hemi.intensity = 1.0 + 1.05 * this.daylight + 0.5 * w.cloud * this.daylight + 0.75 * this.night;
     if (this.daylight < 0.3) this.hemi.color.lerp(NIGHT_FILL, 1 - this.daylight / 0.3);
 
     this.fog.color.copy(u.uHorizon.value);

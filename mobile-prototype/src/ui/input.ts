@@ -10,6 +10,9 @@ export class Input {
   private keyRun = false;
   private braking = false;
   enabled = false;
+  /** In a car the joystick only steers (left/right); gas, brake, boost and handbrake are buttons. */
+  driveMode = false;
+  private held = new Set<string>();
 
   constructor(layer: HTMLElement, private stickEl: HTMLElement, knobEl: HTMLElement,
               jumpBtn: HTMLElement, private runBtn: HTMLElement, brakeBtn?: HTMLElement) {
@@ -18,7 +21,8 @@ export class Input {
       if (!this.enabled) return;
       ev.preventDefault();
       const touch = ev.pointerType !== 'mouse';
-      if (touch && this.stickId === -1 && ev.clientX < window.innerWidth * 0.42) {
+      // joystick only in the lower-left area, so a touch near the mini-map does not grab it
+      if (touch && this.stickId === -1 && ev.clientX < window.innerWidth * 0.42 && ev.clientY > window.innerHeight * 0.36) {
         this.stickId = ev.pointerId; this.stickX = ev.clientX; this.stickY = ev.clientY;
         stickEl.style.left = ev.clientX + 'px'; stickEl.style.top = ev.clientY + 'px';
         stickEl.classList.add('on'); knobEl.style.transform = 'translate(-50%,-50%)';
@@ -32,6 +36,7 @@ export class Input {
         let dx = ev.clientX - this.stickX, dy = ev.clientY - this.stickY;
         const l = Math.hypot(dx, dy);
         if (l > R) { dx *= R / l; dy *= R / l; }
+        if (this.driveMode) dy = 0;
         this.moveX = dx / R; this.moveY = -dy / R;
         knobEl.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
       } else if (ev.pointerId === this.lookId) {
@@ -65,6 +70,7 @@ export class Input {
 
     window.addEventListener('keydown', (ev) => {
       if (!this.enabled) return;
+      if (ev.code === 'Space' && this.driveMode) { this.keys.add(ev.code); ev.preventDefault(); return; }
       this.keys.add(ev.code);
       if (ev.code === 'Space') { this.jumpQueued = true; ev.preventDefault(); }
     });
@@ -80,7 +86,22 @@ export class Input {
     }, { passive: false });
   }
 
+  /** Registers a press-and-hold button; `isHeld(name)` is true while a finger is on it. */
+  hold(el: HTMLElement, name: string) {
+    const up = () => { this.held.delete(name); el.classList.remove('active'); };
+    el.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      if (!this.enabled) return;
+      this.held.add(name); el.classList.add('active');
+      try { el.setPointerCapture(ev.pointerId); } catch { /* optional */ }
+    });
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('lostpointercapture', up);
+  }
+  isHeld(name: string) { return this.held.has(name); }
+  key(...codes: string[]) { return codes.some((c) => this.keys.has(c)); }
+
   private reset() {
+    this.held.clear();
     this.stickId = this.lookId = -1; this.moveX = this.moveY = 0;
     this.stickEl.classList.remove('on'); this.braking = false;
   }
@@ -89,6 +110,7 @@ export class Input {
   frame() {
     let x = this.moveX, y = this.moveY;
     const k = this.keys;
+    if (this.driveMode && this.stickId !== -1) y = 0;
     if (this.stickId === -1) {
       x = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
       y = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);

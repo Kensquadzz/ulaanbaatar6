@@ -89,3 +89,69 @@ Do not scrape Google Street View or use Google Maps imagery as permanent game te
 
 ## Expected delivery
 Return updated source and ZIP, verified Vercel preview URL, actual gameplay screenshots/video, test report, asset licence inventory, known issues and remaining release blockers. If signing credentials/accounts are unavailable, provide build-ready source and exact owner steps; do not claim upload completed.
+
+## Update 2026-11-13: Higgsfield 3D assets integrated (branch claude/project-thread-7vm9zh)
+- Scene GLB revision 12 and both renders downloaded (read-only, no credits) to assets/higgsfield/.
+  The two cloudfront State Department Store images return HTTP 403 and were not obtained.
+- scripts/extract-higgsfield.mjs splits the scene into 21 GLBs: 10 shipped in public/models/higgsfield/,
+  11 kept in assets/higgsfield/library/ (not loaded yet).
+- In game: Higgsfield hybrid sedan is the player car (Kenney sedan, then procedural, as fallbacks);
+  traffic is 6 cars (Higgsfield city car x2, bus, hybrid sedan + Kenney taxi, police);
+  all 18 pedestrians use the two Higgsfield winter people (rigid limbs swinging);
+  5 landmark studies replace the extruded footprints of their buildings, labelled stylised.
+- Fixed: every vehicle model was drawn mirrored (front pointing backwards on east/west headings);
+  rotation is now PI - heading, with a unit test.
+- QA (cloud headless Chromium, SwiftShader, NOT a phone): 36 unit tests pass; tsc and vite build clean;
+  no 404s or page errors; draw calls at Peace Avenue HIGH 86 / MEDIUM 80 / LOW 53
+  (before: 77 / 73 / 52); triangles HIGH 172k / MEDIUM 143k / LOW 115k (before: 133k / 106k / 81k).
+- Still not tested on a physical iPhone/Android. Player character is still procedural.
+
+## Update 2026-11-13 (later): Gameplay V3, after the owner's first iPhone test
+
+Owner feedback (iPhone Safari): phone gets hot; Peace / Olympic bridges, footways and bus stops only
+exist as map lines; driving by pushing the joystick forward is awkward; cars drive through each
+other; hitting people has no consequence (wants ambulance and police like an open-world crime game).
+
+Done (original rules, UI and code; no assets or names from other games):
+- Heat: frame cap 30 fps by default (Settings: 30 / 60), MEDIUM pixel ratio 1.25 and no full-screen
+  post passes (bloom + grade only on HIGH). Never verified on a phone yet.
+- Driving: left thumb joystick steers only; right thumb hold buttons ХИЙ (gas), ТОРМОЗ (brake, holding
+  at a stop reverses), BOOST, ГАР ТОРМОЗ (handbrake slide); БУУХ moved to top right; speedometer
+  bottom centre. Camera swings in behind the car when the view is not being dragged. Keyboard:
+  W/S/A/D, Shift boost, Space handbrake.
+- Collisions: `src/world/carcollide.ts` capsule-vs-capsule for every car (player, traffic, police,
+  ambulance, parked player car); traffic brakes for cars ahead and stops a few seconds after a hit;
+  people on foot cannot walk through cars. Crash sound + camera shake.
+- Incidents: `src/world/incidents.ts`. A pedestrian hit at > 9 km/h falls and stays down; an
+  ambulance (Kenney CC0 model) drives there, treats them for ~7 s, they stand up, ambulance leaves.
+  Police badge (0..5) at top right; up to 3 police cars chase; stopped next to police for ~2 s =
+  caught (fine message, level reset); no police within 80 m for 18 s lowers the level. Ramming a
+  police car raises it. Siren is synthesized. AI drives straight at its target and respawns on a
+  nearby road point when stuck (no road pathfinding yet).
+- Bridges and rail: `pipeline/ub6pipeline/build_bridges.py` -> `data/tiles/bridges.json` (105 real
+  bridges from Overture is_bridge ranges, chained, deck height ESTIMATED from length: about 7 m on the
+  Peace Avenue, Olympic and Sun bridges) and `rail.json` (54 real railway lines, drawn as 1520 mm
+  track). `src/world/bridges.ts` draws deck, sloped parapets and piers; cars drive up and over; roads
+  and people pass underneath.
+- Bus stops: NOT added. Overture places has no bus-stop data and the OSM Overpass host is blocked
+  from the cloud machine, so there is no real source; nothing was invented.
+
+## Square V4 (2026-11-13): flat plazas and Sukhbaatar statue
+
+- Terrain: `pipeline/ub6pipeline/smooth_terrain.py` filters the DEM surface model (Gaussian sigma 24 m, each sample changed at most 4 m) and fits a least-squares plane to every pedestrian plaza over 1500 m² (19 plazas, Sukhbaatar Square included). The raw heights are kept as `height_grid_raw_dm`; the manifest records `terrain_filter`.
+- Monument: `src/world/monument.ts` is a STYLISED Sukhbaatar statue (Higgsfield horse plus a hand-built rider on a granite pedestal) at the real square centre. Its facing direction (west) is an estimate until checked against photos.
+- Government Palace and State Department Store remodel waits on reference photos from Kenzz (the cloud proxy blocks image downloads).
+- Bus stops are still not added: no real data source is reachable.
+
+## Square V5 (2026-11-13): palace, store and statue modelled from the owner's photos
+
+- `src/world/palace.ts`, `src/world/deptstore.ts`: hand-modelled from Kenzz's reference photos and placed on the real footprint rectangle (`PROCEDURAL_LANDMARKS` in landmarks3d.ts). The Higgsfield studies of these two are kept as `HF_STUDIES_REPLACED`. Heights, column counts, depths, rear sides and the store sign are ESTIMATES.
+- `src/world/monument.ts`: rearing horse facing EAST (from the photos), rough rock on a red granite base, relief on the south face, 12 stone lions with chains, flower beds. Sizes are estimates. The lion ring is the collider.
+- `src/world/proc.ts`: helpers (one mesh per material via `bakeByMaterial`, canvas textures, night glow list).
+
+## Zaisan V1 (2026-11-13): Zaisan hill, memorial and Buddha
+
+- Terrain (`smooth_terrain.py`, re-run): the filter fades out on real hillsides (broad slope > 7-12 %), so Zaisan keeps its raw DEM shape. Level pads at monument sites: the Zaisan summit at 1365.9 m and Buddha Park at 1303.7 m (median raw ground; the DEM summit included the memorial itself).
+- `src/world/zaisan.ts`: the memorial was modelled from Kenzz's photos on the OSM circle footprint, with the entrance to the north where the OSM stairs arrive. The spire and soldier sit on the OSM footprint "Red Army Soldier Statue" (27 m in the source), which is drawn inside this model and keeps its own collider. You can walk inside the ring. The mural is an abstract colour band, not the real painting.
+- `src/world/buddha.ts`: the golden standing Buddha sits at the centre of the OSM footway ring in Buddha Park (the Overture POI is 18 m west) and faces north. All sizes are estimates (total height about 24 m).
+- The Higgsfield Zaisan study moved to `HF_STUDIES_REPLACED`.

@@ -37,7 +37,11 @@
     <div id="fps" class="hidden"></div>
     <div id="stick"><div id="knob"></div></div>
     <button id="btnRun" class="action" data-i18n="run"></button>
-    <button id="btnBrake" class="action hidden" aria-label="Brake">ТОРМОЗ</button>
+    <button id="btnBrake" class="action hidden" aria-label="Brake and reverse">ТОРМОЗ<small>ухрах</small></button>
+    <button id="btnGas" class="action drive" aria-label="Accelerate">ХИЙ</button>
+    <button id="btnBoost" class="action drive" aria-label="Boost">BOOST</button>
+    <button id="btnHand" class="action drive" aria-label="Handbrake">ГАР<small>тормоз</small></button>
+    <div id="wanted" class="hidden" aria-label="Police wanted level"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 2l8 3v6c0 5-3.4 9.3-8 11-4.6-1.7-8-6-8-11V5z" fill="#2c6bd6" stroke="#fff" stroke-width="1.6"/><path d="M12 7.2l1.4 2.9 3.2.4-2.3 2.2.6 3.1L12 14.3l-2.9 1.5.6-3.1-2.3-2.2 3.2-.4z" fill="#ffd34d"/></svg><span>ЦАГДАА</span><i></i><i></i><i></i><i></i><i></i></div>
     <button id="btnCar" class="action car-button hidden" aria-label="Enter or exit vehicle">МАШИН</button>
     <div id="vehicleHud" class="card hidden">
       <div class="vehicle-label">UB6 · SEDAN <span id="gear">D</span></div>
@@ -55,6 +59,7 @@
         <button data-v="auto" data-i18n="q_auto"></button><button data-v="low" data-i18n="q_low"></button>
         <button data-v="medium" data-i18n="q_medium"></button><button data-v="high" data-i18n="q_high"></button></div>
         <div id="qualityNote" class="dim small"></div></section>
+      <section><h3 data-i18n="fpsCap"></h3><div class="seg" id="segFps"><button data-v="30" data-i18n="fps30"></button><button data-v="60" data-i18n="fps60"></button></div></section>
       <section><h3 data-i18n="sensitivity"></h3><input id="sens" type="range" min="0.4" max="2.2" step="0.1" value="1" /></section>
       <section><label class="check"><input id="showFps" type="checkbox" /> <span data-i18n="showFps"></span></label></section>
       <section><h3 data-i18n="time"></h3><div class="seg" id="segTime"><button data-v="live" data-i18n="t_live"></button><button data-v="free" data-i18n="t_free"></button></div>

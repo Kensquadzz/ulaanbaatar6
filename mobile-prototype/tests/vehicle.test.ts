@@ -34,3 +34,19 @@ describe('vehicle controller', () => {
     expect(Math.abs(car.speed)).toBeLessThanOrEqual(34);
   });
 });
+
+describe('vehicle facing', () => {
+  it('the model front (+Z) points the way the car drives, for any heading', async () => {
+    const THREE = await import('three');
+    const { Vehicle } = await import('../src/player/vehicle');
+    const world = { heightAt: () => 0, colliders: { resolve() {} }, bounds: { minE: -1e9, maxE: 1e9, minN: -1e9, maxN: 1e9 } };
+    for (const h of [0, 0.7, Math.PI / 2, 2.5, -1.2]) {
+      const v = new Vehicle(); v.heading = h; v.place(0, 0, 0);
+      for (let i = 0; i < 30; i++) v.update(0.033, { x: 0, y: 1, run: false, brake: false }, world as never);
+      v.root.updateMatrixWorld(true);
+      const front = v.root.localToWorld(new THREE.Vector3(0, 0, 1)).sub(v.root.position).normalize();
+      const moved = v.root.position.clone().setY(0).normalize();
+      expect(front.dot(moved)).toBeGreaterThan(0.99);
+    }
+  });
+});

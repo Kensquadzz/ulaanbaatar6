@@ -11,6 +11,7 @@ const T: Record<string, [string, string]> = {
   settings: ['Тохиргоо', 'Settings'], close: ['Хаах', 'Close'],
   language: ['Хэл', 'Language'], quality: ['График', 'Graphics'],
   q_auto: ['Авто', 'Auto'], q_low: ['Бага', 'Low'], q_medium: ['Дунд', 'Medium'], q_high: ['Өндөр', 'High'],
+  fpsCap: ['Кадрын хязгаар', 'Frame rate'], fps30: ['30 FPS (утас халахгүй)', '30 FPS (cooler)'], fps60: ['60 FPS (гөлгөр, халуун)', '60 FPS (smoother, hotter)'],
   sensitivity: ['Камерын мэдрэмж', 'Camera sensitivity'], showFps: ['FPS харуулах', 'Show FPS'],
   time: ['Цаг', 'Time'], t_live: ['Бодит цаг', 'Live'], t_free: ['Чөлөөт', 'Free play'],
   weather: ['Цаг агаар', 'Weather'], w_live: ['Бодит', 'Live'], w_clear: ['Цэлмэг', 'Clear'], w_cloudy: ['Үүлэрхэг', 'Cloudy'],

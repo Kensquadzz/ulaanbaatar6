@@ -91,5 +91,35 @@ export class AudioSystem {
     src.connect(filter); filter.connect(gain); gain.connect(ctx.destination); src.start(); src.stop(now + 0.1);
   }
 
+  /** Crash or impact: a filtered noise burst plus a low thump, louder for harder hits. */
+  crash(intensity: number) {
+    const ctx = this.ctx; if (!ctx || ctx.state !== 'running' || !this.noiseBuffer) return;
+    const k = Math.max(0.15, Math.min(1, intensity)), now = ctx.currentTime;
+    const src = ctx.createBufferSource(); src.buffer = this.noiseBuffer;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 0.6;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.35 * k, now); g.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    src.connect(f); f.connect(g); g.connect(ctx.destination); src.start(now, Math.random()); src.stop(now + 0.4);
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(90, now); o.frequency.exponentialRampToValueAtTime(38, now + 0.2);
+    const og = ctx.createGain(); og.gain.setValueAtTime(0.3 * k, now); og.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    o.connect(og); og.connect(ctx.destination); o.start(now); o.stop(now + 0.26);
+  }
+
+  private sirenOsc?: OscillatorNode; private sirenGain?: GainNode; private sirenLfo?: OscillatorNode;
+  /** Two-tone wail for police and ambulance. level 0 = silent, 1 = close. */
+  siren(level: number) {
+    const ctx = this.ctx; if (!ctx || ctx.state !== 'running') return;
+    if (!this.sirenOsc) {
+      this.sirenOsc = ctx.createOscillator(); this.sirenOsc.type = 'triangle'; this.sirenOsc.frequency.value = 760;
+      this.sirenLfo = ctx.createOscillator(); this.sirenLfo.type = 'sine'; this.sirenLfo.frequency.value = 0.55;
+      const depth = ctx.createGain(); depth.gain.value = 210;
+      this.sirenLfo.connect(depth); depth.connect(this.sirenOsc.frequency);
+      this.sirenGain = ctx.createGain(); this.sirenGain.gain.value = 0;
+      const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1800;
+      this.sirenOsc.connect(f); f.connect(this.sirenGain); this.sirenGain.connect(ctx.destination);
+      this.sirenOsc.start(); this.sirenLfo.start();
+    }
+    this.sirenGain!.gain.setTargetAtTime(Math.max(0, Math.min(1, level)) * 0.05, ctx.currentTime, 0.2);
+  }
+
   setEnabled(enabled: boolean) { this.enabled = enabled; if (!enabled && this.ctx) void this.ctx.suspend(); }
 }

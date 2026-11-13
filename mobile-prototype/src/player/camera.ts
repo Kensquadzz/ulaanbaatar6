@@ -5,14 +5,14 @@ import type { Collider, ColliderSet } from '../world/collision';
 
 export class FollowCamera {
   yaw = 0;                       // direction the camera looks, radians clockwise from north
-  pitch = 0.3;                   // radians above the horizontal (camera looks down by this)
-  distance = 4.9;
-  private cur = 4.9;
+  pitch = 0.17;                  // radians above the horizontal: low, street-level view (Visual V2)
+  distance = 4.3;
+  private cur = 4.3;
   /** Current camera distance; the character is hidden when the camera is pushed right up to it. */
   get current() { return this.cur; }
   private target = new THREE.Vector3();
   private look_ = new THREE.Vector3();
-  private sYaw = 0; private sPitch = 0.3;      // smoothed angles actually used for the view
+  private sYaw = 0; private sPitch = 0.17;      // smoothed angles actually used for the view
   private boost = 0;                           // 0..1, eases in while sprinting (wider view, camera a little further back)
   private init = false;
   private scratch: Collider[] = [];
@@ -24,6 +24,9 @@ export class FollowCamera {
     this.pitch = Math.max(-0.35, Math.min(1.25, this.pitch + dy * 0.004 * sensitivity));
   }
   snap() { this.init = false; }
+  private shakeAmt = 0;
+  /** Short camera shake after a crash (0..1). */
+  shake(k: number) { this.shakeAmt = Math.max(this.shakeAmt, k); }
   setBaseFov(fov: number) { this.baseFov = fov; }
 
   update(dt: number, px: number, py: number, pz: number, heightAt: (e: number, n: number) => number, colliders: ColliderSet, speed = 0) {
@@ -34,7 +37,7 @@ export class FollowCamera {
     this.boost += ((speed > 5 ? 1 : 0) - this.boost) * (1 - Math.exp(-dt * 3));
     const k = this.init ? 1 - Math.exp(-dt * 14) : 1, ky = this.init ? 1 - Math.exp(-dt * 9) : 1;
     // follow the chest; height eases a little slower so steps and curbs do not shake the view
-    this.target.x += (px - this.target.x) * k; this.target.y += (py + 1.45 - this.target.y) * ky; this.target.z += (pz - this.target.z) * k;
+    this.target.x += (px - this.target.x) * k; this.target.y += (py + 1.32 - this.target.y) * ky; this.target.z += (pz - this.target.z) * k;
     const cp = Math.cos(this.sPitch), sp = Math.sin(this.sPitch);
     // unit vector from target back to the camera, and the camera's right vector
     const bx = -Math.sin(this.sYaw) * cp, by = sp, bz = Math.cos(this.sYaw) * cp;
@@ -55,10 +58,15 @@ export class FollowCamera {
     if (!this.init) { this.cur = free; this.init = true; }
     const c = this.camera;
     // slight over-the-shoulder offset that shrinks as the camera is pushed in
-    const sh = 0.28 * Math.min(1, this.cur / this.distance);
+    const sh = 0.42 * Math.min(1, this.cur / this.distance);
     c.position.set(this.target.x + bx * this.cur + rx * sh, this.target.y + by * this.cur, this.target.z + bz * this.cur + rz * sh);
     const floor = heightAt(c.position.x, -c.position.z) + 0.35;
     if (c.position.y < floor) c.position.y = floor;
+    if (this.shakeAmt > 0.001) {
+      const a = this.shakeAmt * 0.25;
+      c.position.x += (Math.random() - 0.5) * a; c.position.y += (Math.random() - 0.5) * a; c.position.z += (Math.random() - 0.5) * a;
+      this.shakeAmt *= Math.exp(-dt * 7);
+    }
     this.look_.set(this.target.x + rx * sh, this.target.y + 0.12, this.target.z + rz * sh);
     c.lookAt(this.look_);
     const fov = this.baseFov + 5 * this.boost;

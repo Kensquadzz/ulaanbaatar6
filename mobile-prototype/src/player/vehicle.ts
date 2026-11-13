@@ -3,15 +3,44 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { Collider } from '../world/collision';
+import { bakeVehicle } from '../world/hfassets';
 
 export interface VehicleWorld {
   heightAt(east: number, north: number): number;
   colliders: {
-    resolve(position: [number, number], minY: number, maxY: number, radius: number, stepUp: number, scratch: Collider[]): void;
+    resolve(position: [number, number], minY: number, maxY: number, radius: number, stepUp: number, scratch: Collider[], skipDeck?: boolean): void;
   };
   bounds: { minE: number; maxE: number; minN: number; maxN: number };
 }
-export interface DriveInput { x: number; y: number; run: boolean; brake: boolean }
+/** x steer (-1..1), y throttle (+) / reverse (-), run = boost, brake = foot brake, handbrake = slide. */
+export interface DriveInput { x: number; y: number; run: boolean; brake: boolean; handbrake?: boolean }
+
+/**
+ * One shared material for every car's head- and tail-light quads. Colours above 1.0 feed the bloom
+ * pass; `setVehicleLights` dims them by day and brightens them after dusk.
+ */
+const LIGHT_MAT = new THREE.MeshBasicMaterial({ vertexColors: true, fog: true, side: THREE.DoubleSide });
+export function setVehicleLights(night: number) { LIGHT_MAT.color.setScalar(0.55 + 2.2 * night); }
+setVehicleLights(0);
+function lightQuads(box: THREE.Box3): THREE.BufferGeometry {
+  const s = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+  const w = Math.min(0.42, s.x * 0.2), h = Math.min(0.14, s.y * 0.09), y = box.min.y + s.y * 0.42;
+  const pos: number[] = [], col: number[] = [];
+  const quad = (x: number, z: number, facing: 1 | -1, r: number, g: number, b: number) => {
+    const pts = [[x - w / 2, y - h / 2], [x + w / 2, y - h / 2], [x + w / 2, y + h / 2], [x - w / 2, y - h / 2], [x + w / 2, y + h / 2], [x - w / 2, y + h / 2]];
+    if (facing < 0) pts.reverse();
+    for (const [px, py] of pts) { pos.push(px, py, z); col.push(r, g, b); }
+  };
+  for (const side of [-1, 1]) {
+    const x = c.x + side * s.x * 0.33;
+    quad(x, box.max.z + 0.02, 1, 1.25, 1.2, 1.05);    // headlights (white)
+    quad(x, box.min.z - 0.02, -1, 1.2, 0.08, 0.04);   // tail lights (red)
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return g;
+}
 
 const moveToward = (v: number, target: number, amount: number) =>
   v < target ? Math.min(target, v + amount) : Math.max(target, v - amount);
@@ -22,6 +51,12 @@ const mat = (color: number, roughness = 0.55, metalness = 0.12) =>
 export class Vehicle {
   readonly root = new THREE.Group();
   east = 0; north = 0; y = 0; heading = 0; speed = 0;
+  /** Half extents of the body footprint in metres (from the loaded model), used for car-to-car collision. */
+  halfLength = 2.15; halfWidth = 0.92; height = 1.6;
+  /** Optional surface height (bridge decks): given the previous Y, returns the Y to drive on. */
+  surfaceAt: ((e: number, n: number, prevY: number) => number) | null = null;
+  /** Shared default for every car (set once the bridge data is loaded). */
+  static surface: ((e: number, n: number, prevY: number) => number) | null = null;
   private wheels: THREE.Group[] = [];
   private frontWheels: THREE.Group[] = [];
   private scratch: Collider[] = [];
@@ -86,27 +121,50 @@ export class Vehicle {
     this.place(0, 0, 0);
   }
 
-  /** Load a licensed GLB vehicle. The procedural car remains as a fallback if loading fails. */
-  async loadModel(url: string): Promise<boolean> {
+  /**
+   * Load a licensed GLB vehicle. The procedural car remains as a fallback if loading fails.
+   * By default the model is stretched to a 1.82 x 1.72 x 3.82 m sedan box (Kenney kit). With
+   * `fit.native` it keeps its own proportions and is scaled uniformly by `fit.scale` (default 1):
+   * used for the Higgsfield vehicles, which are modelled in metres.
+   */
+  async loadModel(url: string, fit: { native?: boolean; scale?: number; box?: [number, number, number] } = {}): Promise<boolean> {
     try {
       const gltf = await this.loader.loadAsync(url);
       const model = gltf.scene;
+      if (fit.native) bakeVehicle(model);          // Higgsfield cars: 18+ meshes -> body + 4 wheels
       model.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(model);
       const size = box.getSize(new THREE.Vector3());
       if (!Number.isFinite(size.x) || size.x <= 0 || size.y <= 0 || size.z <= 0) return false;
-      const scale = new THREE.Vector3(1.82 / size.x, 1.72 / size.y, 3.82 / size.z);
+      const scale = fit.native
+        ? new THREE.Vector3().setScalar(fit.scale ?? 1)
+        : new THREE.Vector3((fit.box?.[0] ?? 1.82) / size.x, (fit.box?.[1] ?? 1.72) / size.y, (fit.box?.[2] ?? 3.82) / size.z);
+      this.halfLength = (size.z * scale.z) / 2; this.halfWidth = (size.x * scale.x) / 2; this.height = size.y * scale.y;
       const wrapper = new THREE.Group();
       wrapper.scale.copy(scale);
       wrapper.position.y = -box.min.y * scale.y;
       wrapper.add(model);
+      // head/tail light quads on the model's own front (+Z) and back faces, for night and bloom
+      const lights = new THREE.Mesh(lightQuads(box), LIGHT_MAT);
+      lights.name = 'vehicle lights';
+      wrapper.add(lights);
       this.loadedWheels = [];
       model.traverse((node) => {
         const mesh = node as THREE.Mesh;
         if (mesh.isMesh) { mesh.castShadow = false; mesh.receiveShadow = false; }
         const name = node.name.toLowerCase();
-        if (name.includes('wheel')) this.loadedWheels.push({ node, front: name.includes('front') });
+        if (name.includes('wheel')) {
+          const front = name.includes('front');
+          // steer (Y) is applied outside the spin (X) so a turned wheel still rolls forward
+          if (front) node.rotation.order = 'YXZ';
+          this.loadedWheels.push({ node, front });
+        }
       });
+      // replacing an earlier GLB (e.g. a fallback) must not leave two bodies on the car
+      for (const old of this.root.children.filter((c) => c.userData.vehicleModel)) {
+        this.root.remove(old);
+      }
+      wrapper.userData.vehicleModel = true;
       this.root.add(wrapper);
       this.procedural.traverse((node) => {
         const mesh = node as THREE.Mesh;
@@ -132,7 +190,7 @@ export class Vehicle {
   place(east: number, north: number, y: number) {
     this.east = east; this.north = north; this.y = y; this.speed = 0;
     this.root.position.set(east, y, -north);
-    this.root.rotation.y = Math.PI + this.heading;
+    this.root.rotation.y = Math.PI - this.heading;   // +Z front; matches the character (heading is clockwise from north)
   }
 
   update(dt: number, input: DriveInput, world: VehicleWorld, snow = 0, rain = 0) {
@@ -141,20 +199,22 @@ export class Vehicle {
     const throttle = Math.max(0, Math.min(1, input.y));
     const reverse = Math.max(0, Math.min(1, -input.y));
 
-    if (input.brake) this.speed = moveToward(this.speed, 0, 15 * h);
+    if (input.handbrake) this.speed = moveToward(this.speed, 0, 7.5 * h);
+    else if (input.brake) this.speed = moveToward(this.speed, 0, 15 * h);
     else if (reverse > 0.08) {
       if (this.speed > 0.5) this.speed = moveToward(this.speed, 0, 10 * reverse * h);
       else this.speed = Math.max(-7, this.speed - 3.0 * reverse * h);
     } else if (throttle > 0.08) {
-      const cap = input.run ? 34 : 26;
-      this.speed = Math.min(cap, this.speed + (4.8 + (input.run ? 2.7 : 0)) * throttle * grip * h);
+      const cap = input.run ? 40 : 26;
+      this.speed = Math.min(cap, this.speed + (4.8 + (input.run ? 5.5 : 0)) * throttle * grip * h);
     } else {
       this.speed *= Math.exp(-0.78 * h);
       if (Math.abs(this.speed) < 0.04) this.speed = 0;
     }
 
     // Reduced steering at high speed; snow/rain lower available grip.
-    const steer = input.x * (0.52 / (1 + Math.abs(this.speed) * 0.05)) * grip;
+    // the handbrake locks the rear wheels: the car turns much tighter and slides (original tuning)
+    const steer = input.x * (0.52 / (1 + Math.abs(this.speed) * 0.05)) * grip * (input.handbrake ? 1.9 : 1);
     if (Math.abs(this.speed) > 0.05) this.heading += (this.speed / 2.72) * Math.tan(steer) * h;
 
     const beforeE = this.east, beforeN = this.north;
@@ -162,16 +222,17 @@ export class Vehicle {
       this.east + Math.sin(this.heading) * this.speed * h,
       this.north + Math.cos(this.heading) * this.speed * h,
     ];
-    world.colliders.resolve(pos, this.y, this.y + 1.75, 1.02, 0, this.scratch);
+    world.colliders.resolve(pos, this.y, this.y + 1.75, 1.02, 0, this.scratch, true);
     const b = world.bounds;
     this.east = Math.max(b.minE, Math.min(b.maxE, pos[0]));
     this.north = Math.max(b.minN, Math.min(b.maxN, pos[1]));
     const moved = Math.hypot(this.east - beforeE, this.north - beforeN);
     if (moved < Math.abs(this.speed) * h * 0.2) this.speed *= 0.12;
 
-    this.y = world.heightAt(this.east, this.north);
+    const surf = this.surfaceAt ?? Vehicle.surface;
+    this.y = surf ? surf(this.east, this.north, this.y) : world.heightAt(this.east, this.north);
     this.root.position.set(this.east, this.y, -this.north);
-    this.root.rotation.y = Math.PI + this.heading;
+    this.root.rotation.y = Math.PI - this.heading;   // +Z front; matches the character (heading is clockwise from north)
     this.frontWheels.forEach(w => { w.rotation.y = -steer; });
     this.wheels.forEach(w => {
       const tyre = w.children[0] as THREE.Mesh;

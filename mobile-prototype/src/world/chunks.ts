@@ -10,7 +10,13 @@ import type { Materials } from './materials';
 import { buildBuildings, buildRoads, buildTerrain, type MeshData } from './meshing';
 import { buildStreet, mergeMeshes, type Lamp } from './street';
 import { HeightField, sampleGrid } from './terrain';
+import { StreetTrees } from './trees';
+import { LandmarkModels, SQUARE_MONUMENT, SQUARE_MONUMENT_ENABLED } from './landmarks3d';
 import type { ChunkData, Manifest, Overview } from './types';
+import { Bridges, type Bridge } from './bridges';
+import { buildSukhbaatarMonument, MONUMENT_HALF, PEDESTAL_H } from './monument';
+import { buildBuddha, BUDDHA, BUDDHA_HALF } from './buddha';
+import { makeCollider } from './collision';
 
 interface Entry {
   cx: number; cy: number; key: string;
@@ -131,6 +137,25 @@ export class ChunkManager {
   private backdrop: Backdrop | null = null;
   triangles = 0; builtChunks = 0; lastBuildMs = 0; worstBuildMs = 0; lampCount = 0;
   private lampField: LampField;
+  /** Higgsfield landmark models drawn on the real footprints of their buildings (stylised). */
+  readonly landmarks = new LandmarkModels();
+  /** Higgsfield street trees on estimated sidewalk positions */
+  readonly trees = new StreetTrees();
+  /** Real bridge decks (estimated heights) and railway tracks */
+  readonly bridges = new Bridges();
+  private bridgeMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  /** Call once the bridge data has arrived; chunks already built are rebuilt with their bridges. */
+  setBridges(bridges: Bridge[], rail: { pts: [number, number][]; flags: string[] }[]) {
+    this.bridges.load(bridges, rail);
+    this.entries.forEach((e) => { if (e.group) this.dropGroup(e); });
+    this.dirty = true;
+  }
+  /** Sukhbaatar statue (stylised), placed at the centre of the square once built */
+  private monument: THREE.Group | null = null;
+  /** golden Buddha in Buddha Park, built on first use */
+  private buddha: THREE.Group | null = null;
+  /** Height to stand or drive on (bridge deck or terrain), given the previous height. */
+  surfaceAt(e: number, n: number, prevY: number) { return this.bridges.surface(e, n, prevY, this.height.heightAt(e, n)); }
   /** True while chunks are still being fetched or built for the current position. */
   get streaming() { return this.dirty; }
 
@@ -146,6 +171,22 @@ export class ChunkManager {
     this.root.add(this.backdrop.mesh);
     this.lampField = new LampField(mats);
     this.root.add(this.lampField.group);
+    this.root.add(this.trees.root);
+    void buildSukhbaatarMonument().then((m) => {
+      m.traverse((o) => { o.userData.shared = true; });
+      this.monument = m;
+      const [me, mn] = SQUARE_MONUMENT.at;
+      const e = this.entries.get(Math.floor(me / CHUNK_M) + ',' + Math.floor(mn / CHUNK_M));
+      if (e?.group) { this.dropGroup(e); this.dirty = true; }
+    });
+    // when a landmark GLB arrives, rebuild the chunks that already drew its building as an extrusion
+    this.landmarks.onReady = () => {
+      this.entries.forEach((e) => {
+        const monument = SQUARE_MONUMENT_ENABLED && e.cx === Math.floor(SQUARE_MONUMENT.at[0] / CHUNK_M) && e.cy === Math.floor(SQUARE_MONUMENT.at[1] / CHUNK_M);
+        if (e.group && (monument || e.data?.buildings.some((b) => this.landmarks.replaces(b)))) { this.dropGroup(e); }
+      });
+      this.dirty = true;
+    };
   }
 
   setQuality(q: Quality, mats: Materials) {
@@ -233,7 +274,7 @@ export class ChunkManager {
     if (!e.group) return;
     e.group.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (!m.isMesh) return;
+      if (!m.isMesh || m.userData.shared) return;      // shared Higgsfield GLB geometry stays cached
       m.geometry.dispose();
       if (m.userData.ownMaterial) {
         const mat = m.material as THREE.MeshStandardMaterial;
@@ -270,12 +311,54 @@ export class ChunkManager {
     // far chunks: carriageways are painted into the ground texture instead of being a second mesh
     const tex = paintGround(d, near ? this.q.groundTexNear : this.q.groundTexFar, !near);
     add(buildTerrain(grid, n, e.cx, e.cy, (ee, nn) => this.height.heightAt(ee, nn)), this.mats.makeGround(tex), true, false, true, 'terrain');
-    const street = buildStreet(d.roads, d.buildings, e.cx, e.cy, hAt, near);
-    if (near) add(mergeMeshes(buildRoads(d.roads, e.cx, e.cy, hAt, true), street), this.mats.road, false, false, true, 'roads');
+    // bridge roads are drawn on their deck (no sidewalks or lamps on the ground underneath)
+    const onBridge = (r: { id: string }) => this.bridges.isBridgeRoad(r.id);
+    const groundRoads = d.roads.filter((r) => !onBridge(r)), bridgeRoads = d.roads.filter(onBridge);
+    const deckH = (east: number, north: number) => this.bridges.deckAt(east, north, 0.6) ?? hAt(east, north);
+    const street = buildStreet(groundRoads, d.buildings, e.cx, e.cy, hAt, near);
+    if (near) add(mergeMeshes(mergeMeshes(buildRoads(groundRoads, e.cx, e.cy, hAt, true), buildRoads(bridgeRoads, e.cx, e.cy, deckH, true)), street), this.mats.road, false, false, true, 'roads');
+    const br = this.bridges.build(e.cx, e.cy, hAt);
+    if (br.mesh.index.length) add(br.mesh, this.bridgeMat, false, near, near, 'bridges');
     e.lamps = street.lamps;
-    const b = buildBuildings(d.buildings, e.cx, e.cy, hAt, near, near ? 0 : this.q.farMinAreaM2);
+    const replaced = d.buildings.filter((x) => this.landmarks.replaces(x));
+    const drawn = replaced.length ? d.buildings.filter((x) => !replaced.includes(x)) : d.buildings;
+    const b = buildBuildings(drawn, e.cx, e.cy, hAt, near, near ? 0 : this.q.farMinAreaM2);
     add(b, this.mats.building, false, near, near, 'buildings');
-    if (near) this.colliders.set(e.key, b.colliders);
+    // replaced landmarks keep the collision of their real footprint
+    if (near) {
+      const custom = replaced.map((x) => this.landmarks.solidsFor(x, hAt));
+      const plain = replaced.filter((_, i) => !custom[i]);
+      this.colliders.set(e.key, b.colliders.concat(plain.length ? buildBuildings(plain, e.cx, e.cy, hAt, false).colliders : [], ...custom.filter((c): c is NonNullable<typeof c> => !!c), br.colliders));
+    }
+    this.landmarks.place(replaced, e.cx, e.cy, group, hAt);
+    const [me, mn] = SQUARE_MONUMENT.at;
+    if (this.monument && Math.floor(me / CHUNK_M) === e.cx && Math.floor(mn / CHUNK_M) === e.cy) {
+      // the horse faces EAST (owner's reference photos, 2026-11-13); +Z front turned by +90 degrees
+      const y = hAt(me, mn) - 0.05;
+      this.monument.position.set(me - e0, y, -(mn - n0));
+      this.monument.rotation.y = Math.PI / 2;
+      group.add(this.monument);
+      if (near) {
+        // the ring of stone lions and chains is the barrier (square, so the turn does not matter)
+        const hx = MONUMENT_HALF.z + 0.6, hz = MONUMENT_HALF.x + 0.6;
+        this.colliders.set(e.key, [...this.colliders.get(e.key)!,
+          makeCollider([[me - hx, mn - hz], [me + hx, mn - hz], [me + hx, mn + hz], [me - hx, mn + hz]], y - 1, y + PEDESTAL_H + 6)]);
+      }
+    }
+    const [be, bn] = BUDDHA.at;
+    if (Math.floor(be / CHUNK_M) === e.cx && Math.floor(bn / CHUNK_M) === e.cy) {
+      // golden Buddha, Buddha Park (hand-modelled from a photo; faces north, see buddha.ts)
+      this.buddha ??= (() => { const g = buildBuddha(); g.traverse((o) => { o.userData.shared = true; }); return g; })();
+      const y = hAt(be, bn) - 0.05;
+      this.buddha.position.set(be - e0, y, -(bn - n0));
+      this.buddha.rotation.y = Math.atan2(BUDDHA.faces[0] - be, -(BUDDHA.faces[1] - bn));
+      group.add(this.buddha);
+      if (near) {
+        const hx = BUDDHA_HALF.x, hz = BUDDHA_HALF.z;   // faces north: x across = east, z depth = north
+        this.colliders.set(e.key, [...this.colliders.get(e.key)!,
+          makeCollider([[be - hx, bn - hz], [be + hx, bn - hz], [be + hx, bn + hz], [be - hx, bn + hz]], y - 1, y + 40)]);
+      }
+    }
     group.updateMatrixWorld(true);
     this.root.add(group);
     e.group = group; e.lod = lod; e.tris = tris;
@@ -290,6 +373,7 @@ export class ChunkManager {
     const near: Lamp[] = [], all: Lamp[] = [];
     this.entries.forEach((e) => { if (!e.group) return; for (const l of e.lamps) { all.push(l); if (e.lod === 0) near.push(l); } });
     this.lampField.set(near, all, this.height);
+    this.trees.set(near, this.height, this.colliders);
     this.triangles = t + this.lampField.triangles; this.builtChunks = c; this.lampCount = all.length;
   }
 }

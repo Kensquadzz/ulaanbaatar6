@@ -1,7 +1,7 @@
 // Shapes of the real data written by pipeline/ub6pipeline/build_tiles.py (format ub6-chunks-v1).
 export interface RoadData {
   id: string; class: string; name: string | null; name_en: string | null; width: number; width_src: string;
-  oneway: number; drivable: boolean; surface: string | null; pts: [number, number, number][];
+  oneway: number; drivable: boolean; surface: string | null; pts: [number, number, number][]; flags?: string[] | null;
 }
 export interface BuildingData {
   id: string; name: string | null; name_en: string | null; subtype: string | null; class: string | null;
