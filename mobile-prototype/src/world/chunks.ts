@@ -273,7 +273,7 @@ export class ChunkManager {
     const street = buildStreet(d.roads, d.buildings, e.cx, e.cy, hAt, near);
     if (near) add(mergeMeshes(buildRoads(d.roads, e.cx, e.cy, hAt, true), street), this.mats.road, false, false, true, 'roads');
     e.lamps = street.lamps;
-    const b = buildBuildings(d.buildings, e.cx, e.cy, hAt, near, near ? 0 : this.q.farMinAreaM2);
+    const b = buildBuildings(d.buildings, e.cx, e.cy, hAt, near, near ? 0 : this.q.farMinAreaM2, this.registry);
     add(b, this.mats.building, false, near, near, 'buildings');
     if (near) this.colliders.set(e.key, b.colliders);
     group.updateMatrixWorld(true);

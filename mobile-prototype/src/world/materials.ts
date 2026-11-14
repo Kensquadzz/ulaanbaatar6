@@ -112,27 +112,125 @@ const PAINTERS: { base: string; grain: number; cell?: Painter }[] = [
   { base: '#d6d6d6', grain: 0.02, cell: (g, _e, x, y, c) => {                      // 8 standing-seam sheet metal
     for (let k = 0; k < 4; k++) { g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x + (c * k) / 4, y, 1.5, c); g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(x + (c * k) / 4 + 1.5, y, 1.5, c); }
   } },
+  { base: '#eee9dc', grain: 0.045, cell: (g, e, x, y, c, r) => {                   // 9 plastered 4-5 storey walk-up (1950s-60s)
+    g.fillStyle = 'rgba(0,0,0,0.05)'; g.fillRect(x, y, c, 1.2);                                      // floor line
+    g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(x, y + c * 0.9, c, c * 0.05);                  // string course
+    for (let i = 0; i < 2; i++) {                                                                    // paired tall windows
+      const wx = x + c * (0.14 + i * 0.44), wy = y + c * 0.26, ww = c * 0.28, wh = c * 0.52;
+      g.fillStyle = '#f8f5ee'; g.fillRect(wx - 2, wy - 2, ww + 4, wh + 5);
+      glass(g, wx, wy, ww, wh, '#7f93a4', '#394754');
+      g.fillStyle = '#f8f5ee'; g.fillRect(wx + ww / 2 - 0.8, wy, 1.6, wh); g.fillRect(wx, wy + wh * 0.3, ww, 1.4);
+      g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(wx - 3, wy - 4, ww + 6, 2);                         // sill shadow
+      lit(e, r, 0.4, wx, wy, ww, wh);
+    }
+    if (r() < 0.18) {                                                                                // small balcony with railing
+      g.fillStyle = '#d8d3c6'; g.fillRect(x + c * 0.08, y + c * 0.1, c * 0.42, c * 0.24);
+      g.fillStyle = 'rgba(0,0,0,0.3)'; for (let i = 0; i <= 6; i++) g.fillRect(x + c * 0.08 + (c * 0.42 * i) / 6, y + c * 0.1, 1, c * 0.24);
+    }
+    if (r() < 0.25) { g.fillStyle = `rgba(90,70,50,${0.05 + r() * 0.08})`; g.fillRect(x + r() * c * 0.6, y, c * 0.2, c); }   // rain streak
+  } },
+  { base: '#f1efea', grain: 0.02, cell: (g, e, x, y, c, r) => {                    // 10 recent residential tower
+    const acc = ['#c7653a', '#3f6f8f', '#6d8a4a', '#8c8f94', '#b89a5a'][Math.floor(r() * 5)];
+    g.fillStyle = 'rgba(0,0,0,0.1)'; g.fillRect(x, y, c, 1.2); g.fillRect(x, y, 1.2, c);              // cladding joints
+    const wx = x + c * 0.08, wy = y + c * 0.22, ww = c * 0.4, wh = c * 0.62;
+    glass(g, wx, wy, ww, wh, '#93a9bb', '#44566a'); g.fillStyle = '#2f3740'; g.fillRect(wx + ww / 2 - 0.8, wy, 1.6, wh); g.fillRect(wx, wy, ww, 1.5);
+    lit(e, r, 0.45, wx, wy, ww, wh);
+    const bx = x + c * 0.54, bw = c * 0.4;                                                           // glazed loggia
+    glass(g, bx, y + c * 0.36, bw, c * 0.5, '#7c93a6', '#35444f');
+    lit(e, r, 0.4, bx, y + c * 0.36, bw, c * 0.5);
+    g.fillStyle = r() < 0.5 ? acc : 'rgba(190,205,215,0.9)'; g.fillRect(bx - 1, y + c * 0.08, bw + 2, c * 0.3);
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(bx - 1, y + c * 0.37, bw + 2, 1.5);
+    if (r() < 0.3) { g.fillStyle = '#dcdcdc'; g.fillRect(bx + bw * 0.6, y + c * 0.1, c * 0.1, c * 0.08); }  // air-conditioner unit
+  } },
+  { base: '#2d3b40', grain: 0.012, cell: (g, e, x, y, c, r) => {                   // 11 dark / green glass tower with fins
+    for (let i = 0; i < 2; i++) {
+      const px = x + (c * i) / 2, v = 0.8 + r() * 0.35;
+      glass(g, px, y, c / 2, c, `rgb(${96 * v | 0},${132 * v | 0},${134 * v | 0})`, `rgb(${40 * v | 0},${66 * v | 0},${74 * v | 0})`);
+      lit(e, r, 0.22, px + 2, y + c * 0.1, c / 2 - 4, c * 0.8);
+    }
+    g.fillStyle = 'rgba(10,20,24,0.55)'; g.fillRect(x, y, c, c * 0.1);
+    g.fillStyle = '#c9d2d4'; g.fillRect(x, y, 2, c); g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(x + 2, y, 1.5, c);        // vertical fin
+    g.fillStyle = '#1c262a'; g.fillRect(x + c / 2 - 0.7, y, 1.4, c);
+  } },
+  { base: '#efe9da', grain: 0.035, cell: (g, e, x, y, c, r) => {                   // 12 school / clinic: big regular windows
+    g.fillStyle = 'rgba(0,0,0,0.08)'; g.fillRect(x, y, c, 1.5);
+    g.fillStyle = 'rgba(255,255,255,0.3)'; g.fillRect(x, y + c * 0.05, c, c * 0.1);
+    const wx = x + c * 0.12, wy = y + c * 0.27, ww = c * 0.76, wh = c * 0.55;
+    g.fillStyle = '#fbf9f3'; g.fillRect(wx - 2, wy - 2, ww + 4, wh + 4);
+    glass(g, wx, wy, ww, wh, '#8ba0b2', '#3d4d5c');
+    g.fillStyle = '#fbf9f3'; for (let i = 1; i < 3; i++) g.fillRect(wx + (ww * i) / 3 - 1, wy, 2, wh); g.fillRect(wx, wy + wh * 0.66, ww, 1.6);
+    lit(e, r, 0.12, wx, wy, ww, wh);
+  } },
+  { base: '#cfd3d4', grain: 0.02, cell: (g, e, x, y, c, r) => {                    // 13 industrial sheet cladding
+    for (let k = 0; k < 16; k++) { g.fillStyle = 'rgba(0,0,0,0.13)'; g.fillRect(x + (c * k) / 16, y, 1, c); g.fillStyle = 'rgba(255,255,255,0.16)'; g.fillRect(x + (c * k) / 16 + 1, y, 1, c); }
+    g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(x, y, c, 1.5);
+    if (r() < 0.5) { glass(g, x + c * 0.08, y + c * 0.66, c * 0.84, c * 0.16, '#7d8d99', '#46535e'); lit(e, r, 0.15, x + c * 0.08, y + c * 0.66, c * 0.84, c * 0.16); }
+    if (r() < 0.2) { g.fillStyle = `rgba(110,70,40,${0.1 + r() * 0.12})`; g.fillRect(x + r() * c * 0.7, y, c * 0.12, c * (0.3 + r() * 0.6)); }   // rust
+    if (r() < 0.12) { g.fillStyle = '#5d646b'; g.fillRect(x + c * 0.3, y, c * 0.4, c * 0.62); g.fillStyle = 'rgba(0,0,0,0.25)'; for (let k = 0; k < 8; k++) g.fillRect(x + c * 0.3, y + (c * 0.62 * k) / 8, c * 0.4, 1); }   // roller door
+  } },
+  { base: '#ebe4d6', grain: 0.03, cell: (g, e, x, y, c, r) => {                    // 14 hotel: punched windows in stone
+    g.fillStyle = 'rgba(0,0,0,0.06)'; g.fillRect(x, y, c, 1); g.fillRect(x, y, 1, c);
+    const wx = x + c * 0.2, wy = y + c * 0.2, ww = c * 0.6, wh = c * 0.6;
+    g.fillStyle = '#cfc6b4'; g.fillRect(wx - 3, wy - 3, ww + 6, wh + 6);
+    glass(g, wx, wy, ww, wh, '#7890a4', '#2f3d4b');
+    g.fillStyle = '#3a342c'; g.fillRect(wx + ww * 0.5 - 0.8, wy, 1.6, wh);
+    lit(e, r, 0.55, wx, wy, ww, wh);
+  } },
+  { base: '#e9e9e6', grain: 0.015, cell: (g, e, x, y, c, r) => {                   // 15 shopping centre: big cladding panels
+    g.fillStyle = 'rgba(0,0,0,0.14)'; g.fillRect(x, y, c, 1.5); g.fillRect(x, y, 1.5, c); g.fillRect(x + c / 2, y, 1, c);
+    const k = r();
+    if (k < 0.3) { glass(g, x + 3, y + c * 0.12, c - 6, c * 0.76, '#8fa7bb', '#40536a'); g.fillStyle = '#2f3740'; g.fillRect(x + c / 2 - 1, y + c * 0.12, 2, c * 0.76); lit(e, r, 0.6, x + 3, y + c * 0.12, c - 6, c * 0.76); }
+    else if (k < 0.42) { g.fillStyle = `hsl(${Math.floor(r() * 360)},45%,45%)`; g.fillRect(x + c * 0.1, y + c * 0.25, c * 0.8, c * 0.5); e.fillStyle = '#fff'; e.globalAlpha = 0.35; e.fillRect(x + c * 0.1, y + c * 0.25, c * 0.8, c * 0.5); e.globalAlpha = 1; }   // blank advert panel (no text)
+  } },
+  { base: '#e8dcc6', grain: 0.05, cell: (g, e, x, y, c, r) => {                    // 16 timber house
+    for (let k = 0; k < 10; k++) { g.fillStyle = 'rgba(60,35,15,0.22)'; g.fillRect(x, y + (c * k) / 10, c, 1.3); }
+    if (r() < 0.6) {
+      const wx = x + c * 0.3, wy = y + c * 0.34, ww = c * 0.4, wh = c * 0.4;
+      g.fillStyle = ['#f3efe6', '#3f7a9a', '#2f7d5a'][Math.floor(r() * 3)]; g.fillRect(wx - 3, wy - 3, ww + 6, wh + 6);          // painted frame
+      glass(g, wx, wy, ww, wh, '#7b90a2', '#394754'); g.fillStyle = '#f3efe6'; g.fillRect(wx + ww / 2 - 1, wy, 2, wh); g.fillRect(wx, wy + wh / 2, ww, 1.5);
+      lit(e, r, 0.5, wx, wy, ww, wh);
+    }
+  } },
+  { base: '#f3f1ea', grain: 0.03, cell: (g, _e, x, y, c) => {                      // 17 ger felt cover with rope bands
+    g.fillStyle = 'rgba(120,95,60,0.75)'; g.fillRect(x, y + c * 0.3, c, 1.6); g.fillRect(x, y + c * 0.52, c, 1.6); g.fillRect(x, y + c * 0.74, c, 1.6);
+    g.fillStyle = 'rgba(0,0,0,0.05)'; g.fillRect(x, y, 1, c);
+  } },
+  { base: '#b9b6b0', grain: 0.03, cell: (g, e, x, y, c, r) => {                    // 18 entrance door
+    const steel = r() < 0.6;
+    g.fillStyle = steel ? ['#5a4a3e', '#3f4b55', '#6a3b2e', '#44505a'][Math.floor(r() * 4)] : '#2b3138';
+    g.fillRect(x + c * 0.12, y, c * 0.76, c * 0.82);
+    if (!steel) { glass(g, x + c * 0.16, y + c * 0.04, c * 0.68, c * 0.74, '#6f8496', '#2b3742'); if (r() < 0.6) { e.fillStyle = WARM[1]; e.globalAlpha = 0.6; e.fillRect(x + c * 0.16, y + c * 0.04, c * 0.68, c * 0.74); e.globalAlpha = 1; } }
+    g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillRect(x + c * 0.5 - 0.8, y, 1.6, c * 0.82);
+    g.fillStyle = '#d9d6cf'; g.fillRect(x + c * 0.06, y, c * 0.06, c * 0.88); g.fillRect(x + c * 0.88, y, c * 0.06, c * 0.88); g.fillRect(x + c * 0.06, y + c * 0.82, c * 0.88, c * 0.06);
+    g.fillStyle = '#e8e2c8'; g.fillRect(x + c * 0.4, y + c * 0.9, c * 0.2, c * 0.06);                  // lamp over the door
+    e.fillStyle = '#ffe2a8'; e.fillRect(x + c * 0.36, y + c * 0.88, c * 0.28, c * 0.1);
+  } },
 ];
 
-function facadeArrays() {
-  const S = 512, ES = 256, N = 8, cell = S / N, L = PAINTERS.length;
+function facadeArrays(S: number) {
+  // Always painted at 512 px per layer, then scaled down for the lighter profiles.
+  const P = 512, ES = S / 2, N = 8, cell = P / N, L = PAINTERS.length;
   const color = new Uint8Array(S * S * 4 * L), emis = new Uint8Array(ES * ES * 4 * L);
   PAINTERS.forEach((p, layer) => {
-    const [cc, g] = canvas(S, S);
-    const [ec, eg] = canvas(S, S);
+    const [cc, g] = canvas(P, P);
+    const [ec, eg] = canvas(P, P);
     const r = rng(7 + layer * 101);
-    g.fillStyle = p.base; g.fillRect(0, 0, S, S);
-    eg.fillStyle = '#000'; eg.fillRect(0, 0, S, S);
+    g.fillStyle = p.base; g.fillRect(0, 0, P, P);
+    eg.fillStyle = '#000'; eg.fillRect(0, 0, P, P);
     if (p.cell) for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) p.cell(g, eg, i * cell, j * cell, cell, r);
     for (let i = 0; i < 9000; i++) {                       // grain and light weathering
       g.fillStyle = `rgba(${r() < 0.5 ? 0 : 255},${r() < 0.5 ? 0 : 255},${r() < 0.5 ? 0 : 255},${p.grain})`;
-      g.fillRect(r() * S, r() * S, 2, 2);
+      g.fillRect(r() * P, r() * P, 2, 2);
     }
-    color.set(g.getImageData(0, 0, S, S).data, layer * S * S * 4);
-    const [sc, sg] = canvas(ES, ES);
-    sg.drawImage(ec, 0, 0, ES, ES);
-    emis.set(sg.getImageData(0, 0, ES, ES).data, layer * ES * ES * 4);
-    void cc; void sc;
+    const scaled = (src: HTMLCanvasElement, size: number) => {
+      if (size === P) return src.getContext('2d')!.getImageData(0, 0, P, P).data;
+      const [, sg] = canvas(size, size);
+      sg.drawImage(src, 0, 0, size, size);
+      return sg.getImageData(0, 0, size, size).data;
+    };
+    color.set(scaled(cc, S), layer * S * S * 4);
+    emis.set(scaled(ec, ES), layer * ES * ES * 4);
+    cc.width = cc.height = ec.width = ec.height = 0;       // release the canvases
   });
   const mk = (data: Uint8Array, size: number) => {
     const t = new THREE.DataArrayTexture(data, size, size, L);
@@ -220,7 +318,7 @@ export interface Materials {
 }
 
 export function createMaterials(q: Quality): Materials {
-  const f = facadeArrays();
+  const f = facadeArrays(q.facadeTex);
   const snow = { value: 0 };
   // Real snow depth (from the weather observation) whitens upward-facing ground; never invented.
   const snowPatch = (m: THREE.Material, amount: number) => {

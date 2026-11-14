@@ -17,6 +17,9 @@ fs.mkdirSync(path.join(dst, 'chunks'), { recursive: true });
 const manifest = JSON.parse(fs.readFileSync(path.join(src, 'manifest.json'), 'utf8'));
 fs.copyFileSync(path.join(src, 'manifest.json'), path.join(dst, 'manifest.json'));
 fs.copyFileSync(path.join(src, 'landmarks.json'), path.join(dst, 'landmarks.json'));
+// landmark registry (data/landmarks/registry.json): which footprints are landmarks and what is verified about them
+const reg = path.resolve(src, '../landmarks/registry.json');
+if (fs.existsSync(reg)) fs.copyFileSync(reg, path.join(dst, 'landmark_registry.json'));
 // district outlines (Overture divisions, see pipeline/ub6pipeline/build_districts.py); optional
 if (fs.existsSync(path.join(src, 'districts.json'))) fs.copyFileSync(path.join(src, 'districts.json'), path.join(dst, 'districts.json'));
 

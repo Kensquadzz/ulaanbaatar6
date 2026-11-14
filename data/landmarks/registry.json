@@ -1,0 +1,64 @@
+{
+ "version": 1,
+ "note": "Landmark registry for ULAANBAATAR 6. Each part points at a real footprint in the Overture/OpenStreetMap data by its id. 'verified' lists facts that come from a cited source. 'approximated' lists everything the procedural stand-in guesses. None of these is an accurate 3D model. To replace a landmark with an authored model, set 'model' to a glTF path under mobile-prototype/public/landmarks/ (see docs/LANDMARKS.md).",
+ "landmarks": {
+  "sukhbaatar_square": {
+   "name": "Сүхбаатарын талбай", "name_en": "Sukhbaatar Square", "status": "approximate_procedural", "model": null,
+   "sources": ["Overture Maps 2026-10-21.0 land_use (OpenStreetMap, ODbL): plaza polygon, 32,275 m2"],
+   "verified": ["Outline and position of the square (source polygon)", "Position of the Government Palace on its north side (source footprint)"],
+   "approximated": ["Paving pattern", "Equestrian statue of D. Sukhbaatar: it is not in the source data; it is placed at the centre of the plaza polygon as a simplified block figure on a pedestal, size estimated"],
+   "parts": [],
+   "extras": [{ "builder": "pedestal_statue", "east": 3.6, "north": -6.9, "params": { "pedestal_height": 4.5 } }]
+  },
+  "government_palace": {
+   "name": "Засгийн газрын ордон", "name_en": "Government Palace", "status": "approximate_procedural", "model": null,
+   "sources": ["Overture Maps 2026-10-21.0 building a83f3ea0 (OpenStreetMap, ODbL): footprint with six courtyards", "en.wikipedia.org/wiki/Government_Palace_(Mongolia): neoclassical, painted white in 2007, colonnade monument to Chinggis, Ogedei and Kublai Khaan completed 2006"],
+   "verified": ["Footprint, courtyards and position (source)", "White exterior and a colonnade with three khan statues on the south front (Wikipedia)"],
+   "approximated": ["Height: drawn at 22 m. The source records one storey, which is wrong; no measured height was found", "Colonnade: column count, spacing, depth and height are guesses", "Statues: simplified blocks, not likenesses", "Roof shape, window layout and all ornament"],
+   "parts": [{ "building": "a83f3ea0-1ef0-4d0a-ba70-a5950ab4dcc3", "builder": "gov_palace", "params": { "height": 22 } }]
+  },
+  "blue_sky_tower": {
+   "name": "Блю скай товер", "name_en": "Blue Sky Tower", "status": "approximate_procedural", "model": null,
+   "sources": ["Overture Maps 2026-10-21.0 building 04fab6dd (OpenStreetMap, ODbL): footprint, height 105 m, 25 floors", "en.wikipedia.org/wiki/Blue_Sky_Tower: 105 m to roof, 25 storeys, completed 2010, sail-like silhouette, blue glass curtain wall"],
+   "verified": ["Footprint and position (source)", "Height 105 m and 25 storeys (source and Wikipedia agree)", "Blue glass facade and sail-like silhouette (Wikipedia)"],
+   "approximated": ["Exact curve of the sail profile", "Which end of the footprint carries the tall edge", "Facade grid, crown and podium details"],
+   "parts": [{ "building": "04fab6dd-91b3-45d8-91f8-efcd25d9a212", "builder": "blue_sky_sail", "params": { "height": 105, "floors": 25, "tall_end": "north" } }]
+  },
+  "shangri_la": {
+   "name": "Шангри-Ла", "name_en": "Shangri-La Ulaanbaatar complex", "status": "approximate_procedural", "model": null,
+   "sources": ["Overture Maps 2026-10-21.0 buildings 8a90698c (135 m, 35 floors), 2ed0ab9c (108 m, 24 floors), 9107aebc (25 floors), 5ca566a0 (complex outline) (OpenStreetMap, ODbL)", "Wikipedia 'Shangri-La Ulaanbaatar Complex': hotel tower 91.5 m / 24 floors, office tower 108 m / 24 floors, third tower 120-129 m (the article contradicts itself), five-storey mall in the base"],
+   "verified": ["Footprints and positions (source)", "Tower heights 135 m and 108 m as recorded in the source; 108 m also matches Wikipedia"],
+   "approximated": ["The 135 m source height for the tallest tower differs from Wikipedia (120-129 m); the source value is used", "Hotel block drawn at 91.5 m (Wikipedia Tower A); matching that figure to footprint 9107aebc is an assumption", "Complex outline 5ca566a0 is tagged 25 floors in the source; it is drawn as the five-storey mall podium (22.5 m), which is an interpretation", "All facades: plain extrusions with a generic glass pattern"],
+   "parts": [
+    { "building": "8a90698c-c691-4da4-9503-218c286fc0b6", "builder": "prism", "params": { "height": 135, "style": "glassDark", "tint": 13560536, "shop": true, "crown": 3 } },
+    { "building": "2ed0ab9c-b9c3-459c-8465-8f8ae494645a", "builder": "prism", "params": { "height": 108, "style": "glassDark", "tint": 14410472, "shop": true, "crown": 2.5 } },
+    { "building": "9107aebc-99ee-49cd-a76d-1fbc9f7d036f", "builder": "prism", "params": { "height": 91.5, "style": "hotel", "tint": 14998480, "shop": true, "crown": 2 } },
+    { "building": "5ca566a0-6e8f-4a31-a7b5-eec8dba9301e", "builder": "prism", "params": { "height": 22.5, "style": "mall", "tint": 14606046, "shop": true } }
+   ]
+  },
+  "state_department_store": {
+   "name": "Улсын их дэлгүүр", "name_en": "State Department Store", "status": "approximate_procedural", "model": null,
+   "sources": ["Overture Maps 2026-10-21.0 building 3e9c49ca (OpenStreetMap, ODbL): footprint, 7 floors", "en.wikipedia.org/wiki/State_Department_Store: current building opened 1961, 7 floors, Soviet style"],
+   "verified": ["Footprint and position (source)", "Seven storeys (source and Wikipedia agree)"],
+   "approximated": ["Height 29 m = 7 storeys x about 4.1 m (retail storey height is a guess)", "Facade: generic department-store pattern; the real entrance, signage and colour are not modelled"],
+   "parts": [{ "building": "3e9c49ca-b053-43e7-851a-e1775ba81417", "builder": "prism", "params": { "height": 29, "style": "mall", "tint": 15263453, "shop": true, "crown": 1.2 } }]
+  },
+  "national_stadium": {
+   "name": "Төв цэнгэлдэх хүрээлэн", "name_en": "National Sports Stadium", "status": "approximate_procedural", "model": null,
+   "sources": ["Overture Maps 2026-10-21.0 building b7eeae37 (ring-shaped stand with open centre), land_use stadium / pitch / track polygons (OpenStreetMap, ODbL)", "Wikipedia 'National Sports Stadium (Mongolia)': built 1958, capacity 12,500"],
+   "verified": ["Outline of the stands, the open centre, pitch and running track positions (source)"],
+   "approximated": ["Stand height (12 m outer edge, 2 m inner edge) and the even rake", "No roof, seats, gates or floodlights are modelled"],
+   "parts": [{ "building": "b7eeae37-dfec-485a-a355-3b9f0f8d5d68", "builder": "stadium_bowl", "params": { "outer_height": 12, "inner_height": 2 } }]
+  },
+  "zaisan_memorial": {
+   "name": "Зайсан толгой", "name_en": "Zaisan Memorial", "status": "approximate_procedural", "model": null,
+   "sources": ["Overture Maps 2026-10-21.0 buildings 04fdf871 (circular footprint) and 3e2a1b82 (Red Army Soldier Statue, height 27 m) (OpenStreetMap, ODbL)", "en.wikipedia.org/wiki/Zaisan_Memorial: circular memorial painting, 27 m soldier statue, built 1969-1971, 612 steps"],
+   "verified": ["Position and circular outline of the memorial (source)", "Statue position and its 27 m height (source and Wikipedia agree)", "A circular mural faces inward (Wikipedia)"],
+   "approximated": ["Height of the ring above the ground, its thickness and the number of supports", "The mural is a flat warm colour, not the real painting", "The statue is a plain tapered stele without the soldier figure"],
+   "parts": [
+    { "building": "04fdf871-b307-42ab-94bd-59a35e804f55", "builder": "zaisan_ring", "params": { "band_base": 4.5, "band_height": 3.5, "supports": 6 } },
+    { "building": "3e2a1b82-bbe4-4af0-816c-24a558cc0673", "builder": "stele", "params": { "height": 27, "taper": 0.6 } }
+   ]
+  }
+ }
+}

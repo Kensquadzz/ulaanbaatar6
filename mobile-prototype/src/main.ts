@@ -1,6 +1,7 @@
 // ULAANBAATAR 6 - iPhone playable web prototype. Separate from (and not a replacement for) the
 // Unreal Engine project in ../unreal; it reuses the same real geographic tiles from ../data/tiles.
 import * as THREE from 'three';
+import { makeRegistry, type LandmarkRegistry } from './world/landmarks';
 import './ui/style.css';
 import { QUALITY, SPAWN, TARGET_FPS, type QualityName } from './config';
 import { CHUNK_M, ORIGIN_LAT, ORIGIN_LON, UB_UTC_OFFSET_S, enuToGeo } from './core/geo';
@@ -89,10 +90,11 @@ async function boot() {
   renderer.toneMappingExposure = 1.0;
   renderer.info.autoReset = false;
 
-  let manifest: Manifest, overview: Overview, landmarks: Record<string, Landmark>;
+  let manifest: Manifest, overview: Overview, landmarks: Record<string, Landmark>, registry: LandmarkRegistry;
   const getJson = async (name: string) => { const r = await fetch(DATA + name); if (!r.ok) throw new Error(name + ' HTTP ' + r.status); return r.json(); };
   try {
-    [manifest, overview, landmarks] = await Promise.all([getJson('manifest.json'), getJson('overview.json'), getJson('landmarks.json').then((l) => l.found)]);
+    [manifest, overview, landmarks, registry] = await Promise.all([getJson('manifest.json'), getJson('overview.json'), getJson('landmarks.json').then((l) => l.found),
+      getJson('landmark_registry.json').then(makeRegistry)]);
   } catch (e) {
     console.error(e);
     $('loadText').textContent = t('dataError'); $('loadText').classList.add('error');
@@ -120,7 +122,7 @@ async function boot() {
   qName = choice === 'auto' ? 'medium' : choice;
 
   let mats = createMaterials(QUALITY[qName]);
-  const chunks = new ChunkManager(DATA, manifest, overview, mats, QUALITY[qName]);
+  const chunks = new ChunkManager(DATA, manifest, overview, mats, QUALITY[qName], registry);
   scene.add(chunks.root);
   const sky = new SkySystem(scene, QUALITY[qName].shadowMap);
   let precip = new Precipitation(QUALITY[qName].particles);

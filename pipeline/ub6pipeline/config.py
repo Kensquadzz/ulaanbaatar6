@@ -17,6 +17,8 @@ OVERTURE_THEMES = {
     "water": "theme=base/type=water",
     "place": "theme=places/type=place",
     "land_use": "theme=base/type=land_use",
+    "infrastructure": "theme=base/type=infrastructure",   # lamps, signals, crossings, bus stops, fences
+    "land": "theme=base/type=land",                       # trees, tree rows, woods
 }
 
 # Streaming chunk edge in metres. 256 m keeps a 3x3 neighbourhood under ~0.6 km2,
