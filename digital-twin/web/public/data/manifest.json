@@ -16,6 +16,8 @@
   "vegetation_areas": 6454,
   "mapped_trees": 9631,
   "transit_stops": 838,
+  "traffic_signals": 119,
+  "signal_crossings": 183,
   "search_places": 15629
  },
  "sources": [

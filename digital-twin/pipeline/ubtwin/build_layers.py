@@ -9,6 +9,7 @@ Outputs (GeoJSON, WGS84 lon/lat, coordinates rounded to 1e-6 deg, about 0.1 m):
   vegetation.geojson      forest, scrub, grass, wetland, parks, gardens, cemeteries (areas)
   trees.geojson           individually mapped trees (points)
   transit.geojson         bus stops and stop positions (points)
+  signals.geojson         mapped traffic lights and signalised crossings (points, positions only)
   search.json             districts, named places, named buildings, bus stops for search
   manifest.json           counts, sources, licences, dates, CRS, accuracy notes
 
@@ -178,6 +179,24 @@ def build_transit(raw, out, search):
     return {"transit_stops": write_fc(os.path.join(out, "transit.geojson"), feats)}
 
 
+def build_signals(raw, out):
+    """Mapped traffic lights: OSM highway=traffic_signals, plus pedestrian crossings tagged
+    crossing=traffic_signals. Positions only: no open feed of live signal phases exists for
+    Ulaanbaatar, so the viewer never animates or guesses phases."""
+    feats = []
+    for g, r in rows(raw, "infrastructure", ["id", "subtype", "class", "source_tags"]):
+        if g.geom_type != "Point" or r["subtype"] != "transportation":
+            continue
+        tags = dict(r["source_tags"] or [])
+        if r["class"] == "traffic_signals":
+            feats.append(feature(g, {"c": "road", "id": r["id"]}))
+        elif r["class"] == "crossing" and tags.get("crossing") == "traffic_signals":
+            feats.append(feature(g, {"c": "crossing", "id": r["id"]}))
+    n = write_fc(os.path.join(out, "signals.geojson"), feats)
+    return {"traffic_signals": sum(1 for f in feats if f["properties"]["c"] == "road"),
+            "signal_crossings": n - sum(1 for f in feats if f["properties"]["c"] == "road")}
+
+
 def build_places(raw, search):
     n = 0
     for g, r in rows(raw, "place", ["names", "basic_category", "confidence"]):
@@ -204,6 +223,7 @@ def main(raw, out):
     stats.update(build_water(raw, out))
     stats.update(build_vegetation(raw, out))
     stats.update(build_transit(raw, out, search))
+    stats.update(build_signals(raw, out))
     stats.update(build_places(raw, search))
     for s in search:
         if not s.get("e"):

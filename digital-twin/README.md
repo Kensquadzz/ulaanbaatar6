@@ -26,6 +26,8 @@ no code with them and changes nothing there.
 | Roads and railways, draped on terrain, streamed by area | yes, toggle |
 | Rivers, lakes, vegetation, parks, 9,631 mapped trees | yes, toggles |
 | Bus stops (709 stops + 129 stop positions) with names | yes, toggle |
+| Traffic lights (302 mapped positions); live phases not available as open data, so not shown | yes, toggle, tap for info |
+| Live traffic congestion (TomTom Traffic Flow, refresh every 2 min) | yes, needs a TomTom API key (entered in the app or `NEXT_PUBLIC_TOMTOM_KEY`) |
 | Search: districts, 15,629 named places/buildings/stops; Cyrillic or Latin typing ("zaisan") | yes |
 | Satellite imagery mode (Esri World Imagery), Sentinel-2 10 m, OSM map, data-only | yes |
 | Measurement: geodesic distance (Vincenty) and area | yes |

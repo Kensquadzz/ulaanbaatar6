@@ -48,7 +48,18 @@ export const UB_BBOX: [number, number, number, number] = [106.3626, 47.302, 108.
 
 export type ImageryMode = "satellite" | "sentinel" | "map" | "none";
 export type LayerKey =
-  | "buildings" | "unknownHeights" | "roads" | "terrain" | "vegetation" | "trees" | "water" | "transit" | "boundaries";
+  | "buildings" | "unknownHeights" | "roads" | "terrain" | "vegetation" | "trees" | "water" | "transit" | "boundaries"
+  | "signals" | "traffic";
+
+/** Live traffic flow (congestion) from TomTom; needs the user's own API key. */
+export const TRAFFIC_KEY_STORAGE = "ub3d.tomtomKey";
+export function trafficKey(): string {
+  try {
+    return localStorage.getItem(TRAFFIC_KEY_STORAGE) || process.env.NEXT_PUBLIC_TOMTOM_KEY || "";
+  } catch {
+    return process.env.NEXT_PUBLIC_TOMTOM_KEY || "";
+  }
+}
 
 export interface BuildingInfo {
   id: string;
@@ -92,7 +103,7 @@ const RANK = ["path", "footway", "cycleway", "steps", "track", "service", "pedes
 const roadRank = (p: any) => (p.k === "rail" ? 100 : RANK.indexOf(p.c));
 type RoadIndex = { cells: { f: string; b: [number, number, number, number]; n: number }[] };
 const OVERLAY_RECT: [number, number, number, number] = [106.3, 47.25, 108.56, 48.33];
-const OVERLAY_ORDER: LayerKey[] = ["vegetation", "trees", "water", "roads", "boundaries"];
+const OVERLAY_ORDER: LayerKey[] = ["vegetation", "trees", "water", "roads", "traffic", "boundaries"];
 
 export const isMobile = () =>
   typeof navigator !== "undefined" && (/iPhone|iPad|Android/i.test(navigator.userAgent) || window.innerWidth < 760);
@@ -116,6 +127,27 @@ function iconCanvas(draw: (ctx: CanvasRenderingContext2D) => void, size = 32): H
   return c;
 }
 
+const SIGNAL_ICON = (pedestrian: boolean) => iconCanvas((ctx) => {
+  ctx.fillStyle = "#222";
+  ctx.beginPath();
+  ctx.roundRect(9, 1, 14, 30, 4);
+  ctx.fill();
+  const lamps = ["#ff4d4d", "#ffd23f", "#3ddc6a"];
+  lamps.forEach((c, i) => {
+    ctx.fillStyle = c;
+    ctx.globalAlpha = 0.55;
+    ctx.beginPath();
+    ctx.arc(16, 7 + i * 9, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+  if (pedestrian) {
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(9, 1, 14, 30);
+  }
+});
+
 const BUS_ICON = () => iconCanvas((ctx) => {
   ctx.fillStyle = "#1e6fd9";
   ctx.beginPath();
@@ -136,7 +168,7 @@ export class Twin {
   private baseLayer?: ImageryLayer;
   private visible: Record<LayerKey, boolean> = {
     buildings: true, unknownHeights: true, roads: true, terrain: true, vegetation: true, trees: true,
-    water: true, transit: true, boundaries: true,
+    water: true, transit: true, boundaries: true, signals: true, traffic: false,
   };
   private roadCells = new Map<string, Promise<Feat[]>>();
   private handler: ScreenSpaceEventHandler;
@@ -147,6 +179,7 @@ export class Twin {
   private highlighted?: { feature: Cesium3DTileFeature; color: Color };
   private street = { on: false, keys: new Set<string>(), heading: 0, pitch: 0, move: { f: 0, r: 0, t: 0 } };
   onPick: (b: BuildingInfo | null, p: PickInfo | null) => void = () => {};
+  onSignal: (s: { kind: string; id: string; lon: number; lat: number } | null) => void = () => {};
   onMeasure: (text: string) => void = () => {};
   onCamera: (p: PickInfo & { altitude: number }) => void = () => {};
 
@@ -284,7 +317,7 @@ export class Twin {
     progress("Ус, ургамал");
     await Promise.all([want("water") && this.loadWater(), want("vegetation") && this.loadVegetation()]);
     progress("Мод, автобусны буудал");
-    await Promise.all([want("transit") && this.loadTransit()]);
+    await Promise.all([want("transit") && this.loadTransit(), want("signals") && this.loadSignals()]);
     progress("");
   }
 
@@ -530,6 +563,54 @@ export class Twin {
     this.viewer.scene.primitives.add(col);
   }
 
+  private signalIds = new Map<any, { kind: string; id: string; lon: number; lat: number }>();
+
+  private async loadSignals() {
+    const fc = await getJSON<FC>("signals.geojson");
+    const bc = new BillboardCollection({ scene: this.viewer.scene });
+    const road = SIGNAL_ICON(false), ped = SIGNAL_ICON(true);
+    for (const f of fc.features) {
+      const [lon, lat] = f.geometry.coordinates;
+      const b = bc.add({
+        position: Cartesian3.fromDegrees(lon, lat), image: f.properties.c === "road" ? road : ped,
+        width: 18, height: 18, verticalOrigin: VerticalOrigin.BOTTOM, heightReference: HeightReference.CLAMP_TO_GROUND,
+        distanceDisplayCondition: new DistanceDisplayCondition(0, 4000), disableDepthTestDistance: 2000,
+        scaleByDistance: new NearFarScalar(100, 1.4, 4000, 0.7),
+      });
+      this.signalIds.set(b, { kind: f.properties.c, id: f.properties.id, lon, lat });
+    }
+    this.labels.set("signals", bc);
+    bc.show = this.visible.signals;
+    this.viewer.scene.primitives.add(bc);
+  }
+
+  /** (Re)create the live traffic layer. Returns false when no key is configured. */
+  refreshTraffic(): boolean {
+    const key = trafficKey();
+    const old = this.overlays.get("traffic");
+    if (old) {
+      this.viewer.imageryLayers.remove(old, true);
+      this.overlays.delete("traffic");
+    }
+    if (!key) return false;
+    const stamp = Math.floor(Date.now() / 120000); // new tiles every 2 minutes
+    const layer = new ImageryLayer(new UrlTemplateImageryProvider({
+      url: `https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?tileSize=256&key=${encodeURIComponent(key)}&t=${stamp}`,
+      minimumLevel: 0,
+      maximumLevel: 18,
+      rectangle: Rectangle.fromDegrees(...OVERLAY_RECT),
+      credit: new Credit("Live traffic flow © TomTom"),
+    }), { alpha: 0.9 });
+    layer.show = this.visible.traffic;
+    this.overlays.set("traffic", layer);
+    this.restackOverlays();
+    this.trafficUpdated = new Date();
+    return true;
+  }
+
+  trafficUpdated?: Date;
+  private trafficTimer?: ReturnType<typeof setInterval>;
+
   private addOverlay(key: LayerKey, provider: VectorImageryProvider) {
     const layer = new ImageryLayer(provider as any, {});
     layer.show = this.visible[key];
@@ -554,6 +635,15 @@ export class Twin {
     if (key === "buildings" || key === "unknownHeights") this.applyBuildingStyle();
     else if (key === "terrain") {
       this.viewer.terrainProvider = on ? createTerrariumTerrain() : new EllipsoidTerrainProvider();
+    } else if (key === "traffic") {
+      clearInterval(this.trafficTimer);
+      if (on) {
+        this.refreshTraffic();
+        this.trafficTimer = setInterval(() => this.refreshTraffic(), 120000);
+      } else {
+        const o = this.overlays.get("traffic");
+        if (o) o.show = false;
+      }
     } else {
       const o = this.overlays.get(key);
       if (o) o.show = on;
@@ -587,6 +677,12 @@ export class Twin {
       ? { lon: CMath.toDegrees(carto.longitude), lat: CMath.toDegrees(carto.latitude), height: carto.height }
       : null;
     this.clearHighlight();
+    const sig = picked?.primitive ? this.signalIds.get(picked.primitive) : undefined;
+    this.onSignal(sig ?? null);
+    if (sig) {
+      this.onPick(null, info);
+      return;
+    }
     if (picked instanceof Cesium3DTileFeature) {
       this.highlighted = { feature: picked, color: Color.clone(picked.color) };
       picked.color = Color.fromCssColorString("#4fb3ff");

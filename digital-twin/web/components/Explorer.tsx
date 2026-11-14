@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BuildingInfo, ImageryMode, LayerKey, PickInfo, Twin as TwinT } from "@/lib/twin";
+
+const TRAFFIC_KEY_STORAGE = "ub3d.tomtomKey";
 import { formatArea, formatCoord, search, type SearchItem } from "@/lib/geo";
 
 const LAYERS: { key: LayerKey; label: string; hint?: string }[] = [
@@ -12,6 +14,8 @@ const LAYERS: { key: LayerKey; label: string; hint?: string }[] = [
   { key: "trees", label: "Бүртгэлтэй мод" },
   { key: "water", label: "Гол, ус" },
   { key: "transit", label: "Автобусны буудал" },
+  { key: "signals", label: "Гэрлэн дохио (байршил)" },
+  { key: "traffic", label: "Замын түгжрэл (live)", hint: "TomTom түлхүүр" },
   { key: "boundaries", label: "Дүүргийн хил" },
 ];
 
@@ -39,7 +43,11 @@ export default function Explorer() {
   const [error, setError] = useState("");
   const [panel, setPanel] = useState(false);
   const [layers, setLayers] = useState<Record<LayerKey, boolean>>(() =>
-    Object.fromEntries(LAYERS.map((l) => [l.key, true])) as Record<LayerKey, boolean>);
+    Object.fromEntries(LAYERS.map((l) => [l.key, l.key !== "traffic"])) as Record<LayerKey, boolean>);
+  const [signal, setSignal] = useState<{ kind: string; id: string; lon: number; lat: number } | null>(null);
+  const [askKey, setAskKey] = useState(false);
+  const [keyInput, setKeyInput] = useState("");
+  const [trafficAt, setTrafficAt] = useState<Date | null>(null);
   const [imagery, setImagery] = useState<ImageryMode>("satellite");
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState<SearchItem[]>([]);
@@ -65,6 +73,7 @@ export default function Explorer() {
         (window as any).__twin = t;
         t.onPick = (b, p) => { setBuilding(b); setPick(p); };
         t.onMeasure = setMeasureText;
+        t.onSignal = setSignal;
         t.onCamera = setCam;
         const q = new URLSearchParams(window.location.search).get("layers");
         await t.loadAll(setLoading, q ? new Set(q.split(",")) : undefined);
@@ -101,6 +110,12 @@ export default function Explorer() {
 
   const toggle = (k: LayerKey) => {
     const on = !layers[k];
+    if (k === "traffic" && on) {
+      let key = process.env.NEXT_PUBLIC_TOMTOM_KEY || "";
+      try { key = localStorage.getItem(TRAFFIC_KEY_STORAGE) || key; } catch { /* private mode */ }
+      if (!key) { setAskKey(true); setPanel(false); return; }
+      setTrafficAt(new Date());
+    }
     setLayers({ ...layers, [k]: on });
     twin.current?.setLayer(k, on);
   };
@@ -271,6 +286,51 @@ export default function Explorer() {
               {formatCoord(pick.lon, pick.lat)} · {pick.height.toFixed(0)} м
             </p>
           )}
+        </div>
+      )}
+
+      {/* traffic light info */}
+      {signal && !building && (
+        <div className="panel absolute bottom-16 right-2 z-10 w-[min(22rem,calc(100vw-1rem))] rounded-2xl p-4 text-sm">
+          <div className="mb-2 flex items-start justify-between">
+            <h2 className="text-base font-semibold">{signal.kind === "road" ? "Гэрлэн дохио" : "Гэрлэн дохиотой гарц"}</h2>
+            <button className="text-slate-400" onClick={() => setSignal(null)}>✕</button>
+          </div>
+          <p className="text-slate-300">Байршил: OpenStreetMap (Overture). Гэрлийн live төлөв (улаан/шар/ногоон): Улаанбаатарт нээлттэй өгөгдөл байхгүй тул харуулаагүй. Таамаглан анивчуулахгүй.</p>
+          <p className="mt-2 font-mono text-xs text-slate-400">{formatCoord(signal.lon, signal.lat)}</p>
+        </div>
+      )}
+
+      {/* live traffic key prompt */}
+      {askKey && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/50 p-3" onClick={() => setAskKey(false)}>
+          <div className="panel w-full max-w-md rounded-2xl p-5 text-sm leading-relaxed" onClick={(e) => e.stopPropagation()}>
+            <h2 className="mb-2 text-lg font-semibold">Замын түгжрэл (live)</h2>
+            <p className="text-slate-300">Бодит цагийн түгжрэлийг TomTom Traffic Flow-оос авна. Үнэгүй хувийн түлхүүр хэрэгтэй (developer.tomtom.com). Түлхүүр зөвхөн энэ төхөөрөмжид хадгалагдана.</p>
+            <input value={keyInput} onChange={(e) => setKeyInput(e.target.value)} placeholder="TomTom API key"
+              className="mt-3 h-11 w-full rounded-lg bg-white/10 px-3 outline-none" />
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <Btn onClick={() => setAskKey(false)}>Болих</Btn>
+              <Btn active onClick={() => {
+                const k = keyInput.trim();
+                if (!k) return;
+                try { localStorage.setItem(TRAFFIC_KEY_STORAGE, k); } catch { /* ignore */ }
+                setAskKey(false);
+                setLayers({ ...layers, traffic: true });
+                twin.current?.setLayer("traffic", true);
+                setTrafficAt(new Date());
+              }}>Хадгалах</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {layers.traffic && trafficAt && (
+        <div className="panel absolute right-2 top-16 z-10 rounded-xl px-3 py-2 text-xs">
+          <div className="mb-1 font-semibold">Түгжрэл (TomTom, 2 мин тутам)</div>
+          <div className="flex items-center gap-1"><span className="h-2 w-6 rounded bg-[#3ddc6a]" />чөлөөтэй
+            <span className="ml-2 h-2 w-6 rounded bg-[#ffd23f]" />удаан
+            <span className="ml-2 h-2 w-6 rounded bg-[#ff4d4d]" />түгжрэл</div>
         </div>
       )}
 
