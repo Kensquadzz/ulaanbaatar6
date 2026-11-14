@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+:root {
+  --panel: rgba(15, 20, 28, 0.82);
+  --panel-border: rgba(255, 255, 255, 0.10);
+  --accent: #4fb3ff;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #0b0f14;
+  color: #e8edf2;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  overscroll-behavior: none;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.cesium-viewer-bottom { display: none !important; }
+.cesium-widget-credits { display: none !important; }

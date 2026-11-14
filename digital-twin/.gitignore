@@ -1,0 +1,4 @@
+# Raw Overture extracts (about 110 MB) are re-downloadable with `python -m ubtwin.fetch`.
+data/raw/
+__pycache__/
+.pytest_cache/
