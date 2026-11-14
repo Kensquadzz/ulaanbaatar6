@@ -103,7 +103,7 @@ const RANK = ["path", "footway", "cycleway", "steps", "track", "service", "pedes
 const roadRank = (p: any) => (p.k === "rail" ? 100 : RANK.indexOf(p.c));
 type RoadIndex = { cells: { f: string; b: [number, number, number, number]; n: number }[] };
 const OVERLAY_RECT: [number, number, number, number] = [106.3, 47.25, 108.56, 48.33];
-const OVERLAY_ORDER: LayerKey[] = ["vegetation", "trees", "water", "roads", "traffic", "boundaries"];
+const OVERLAY_ORDER: LayerKey[] = ["vegetation", "trees", "water", "roads", "traffic", "incidents" as LayerKey, "boundaries"];
 
 export const isMobile = () =>
   typeof navigator !== "undefined" && (/iPhone|iPad|Android/i.test(navigator.userAgent) || window.innerWidth < 760);
@@ -587,10 +587,12 @@ export class Twin {
   /** (Re)create the live traffic layer. Returns false when no key is configured. */
   refreshTraffic(): boolean {
     const key = trafficKey();
-    const old = this.overlays.get("traffic");
-    if (old) {
-      this.viewer.imageryLayers.remove(old, true);
-      this.overlays.delete("traffic");
+    for (const k of ["traffic", "incidents"] as const) {
+      const old = this.overlays.get(k as LayerKey);
+      if (old) {
+        this.viewer.imageryLayers.remove(old, true);
+        this.overlays.delete(k as LayerKey);
+      }
     }
     if (!key) return false;
     const stamp = Math.floor(Date.now() / 120000); // new tiles every 2 minutes
@@ -603,6 +605,16 @@ export class Twin {
     }), { alpha: 0.9 });
     layer.show = this.visible.traffic;
     this.overlays.set("traffic", layer);
+    // Live incidents (accidents, road works, closures) from the same Traffic API, drawn above the flow colours.
+    const inc = new ImageryLayer(new UrlTemplateImageryProvider({
+      url: `https://api.tomtom.com/traffic/map/4/tile/incidents/s3/{z}/{x}/{y}.png?tileSize=256&key=${encodeURIComponent(key)}&t=${stamp}`,
+      minimumLevel: 0,
+      maximumLevel: 18,
+      rectangle: Rectangle.fromDegrees(...OVERLAY_RECT),
+      credit: new Credit("Live traffic incidents © TomTom"),
+    }));
+    inc.show = this.visible.traffic;
+    this.overlays.set("incidents" as LayerKey, inc);
     this.restackOverlays();
     this.trafficUpdated = new Date();
     return true;
@@ -641,8 +653,10 @@ export class Twin {
         this.refreshTraffic();
         this.trafficTimer = setInterval(() => this.refreshTraffic(), 120000);
       } else {
-        const o = this.overlays.get("traffic");
-        if (o) o.show = false;
+        for (const k of ["traffic", "incidents"]) {
+          const o = this.overlays.get(k as LayerKey);
+          if (o) o.show = false;
+        }
       }
     } else {
       const o = this.overlays.get(key);
